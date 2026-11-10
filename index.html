@@ -40,7 +40,8 @@
     <button id="mono" class="pill">B&amp;W</button>
     <button id="lens" class="pill" hidden>Lens</button>
     <button id="flip" class="pill">Flip</button>
-    <button id="save" class="pill accent">Save</button>
+    <button id="save" class="pill">Export</button>
+    <button id="savepj" class="pill accent">Save project</button>
     <button id="more" class="pill" aria-label="More">&#8943;</button>
   </div>
 
@@ -49,7 +50,10 @@
     <div id="update-msg"></div>
     <div id="engine-info"></div>
     <button id="dbgbtn" class="pill">Show debug log</button>
-    <button id="clear" class="pill">Clear cache (delete all clips)</button>
+    <button id="pj-open" class="pill">Projects</button>
+    <button id="pj-saveas" class="pill">Save project as...</button>
+    <button id="pj-new" class="pill">New project</button>
+    <button id="clear" class="pill">Clear timeline (delete clips)</button>
   </div>
 
   <!-- Bottom: edit panel, transport, timeline -->
@@ -106,16 +110,21 @@
     <div id="bar"><div id="bar-fill"></div></div>
     <div class="row-btns">
       <button id="ov-save" hidden>Save to device</button>
+      <button id="ov-share" hidden>Share</button>
+      <button id="ov-keep" hidden>Keep in project</button>
       <button id="ov-close" class="pill">Cancel</button>
     </div>
   </div>
 </div>
 
 <!-- Two hidden players: one plays while the next waits ready -->
+<div id="pj" hidden><div class="card"><div id="pj-body"></div></div></div>
+
 <pre id="dbg" hidden></pre>
 <div id="pool"><video id="pA" playsinline></video><video id="pB" playsinline></video></div>
 <canvas id="canvas" hidden></canvas>
 <script src="engine.js"></script>
 <script src="app.js"></script>
+<script src="projects.js"></script>
 </body>
 </html>

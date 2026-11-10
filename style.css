@@ -95,7 +95,7 @@ button { font:inherit; color:var(--text); }
 
 /* while recording: clear the screen, leave only what matters */
 #app.recording #bottom, #app.recording #center-play, #app.recording #golive,
-#app.recording #flip, #app.recording #lens, #app.recording #save, #app.recording #more, #app.recording #count { visibility:hidden; }
+#app.recording #savepj, #app.recording #flip, #app.recording #lens, #app.recording #save, #app.recording #more, #app.recording #count { visibility:hidden; }
 
 /* hidden players, kept in the page so the phone keeps decoding them */
 #pool video { position:fixed; left:0; top:0; width:2px; height:2px; opacity:.01; pointer-events:none; }
@@ -115,3 +115,14 @@ button { font:inherit; color:var(--text); }
 .jbtn.on { background:var(--accent); border-color:var(--accent); color:#000; font-weight:600; }
 
 #dbg { position:fixed; left:4px; top:48px; z-index:50; margin:0; max-width:60vw; max-height:60vh; overflow:hidden; background:rgba(0,0,0,.75); color:#8f8; font:10px/1.25 monospace; padding:4px; pointer-events:none; white-space:pre-wrap; }
+
+/* projects: save dialog, gallery */
+#pj { position:fixed; inset:0; background:rgba(0,0,0,.85); display:grid; place-items:center; z-index:30; padding:12px; }
+#pj .card { max-height:90vh; overflow:auto; width:min(520px,100%); }
+#pj input[type=text] { width:100%; box-sizing:border-box; min-height:48px; font-size:17px; padding:0 12px; border-radius:12px; border:1px solid var(--line); background:#0e0e12; color:#fff; margin-bottom:12px; }
+.pjrow { display:block; width:100%; text-align:left; min-height:52px; margin:0 0 8px; padding:8px 14px; border-radius:12px; border:1px solid var(--line); background:#2a2a31; font-size:16px; }
+.pjrow small { display:block; color:var(--dim); font-size:12px; margin-top:2px; }
+#pj .row-btns { margin-top:12px; flex-wrap:wrap; }
+#pj .danger { background:#5a1f1f; border-color:#7a2a2a; }
+#pj h3 { margin:14px 0 8px; font-size:14px; color:var(--dim); font-weight:600; }
+#ov-share, #ov-keep { background:#2a2a31; }

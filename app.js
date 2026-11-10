@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver13';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver14';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -9,7 +9,7 @@ const MIN_CLIP = 0.3;            // shortest a trimmed clip can be (seconds)
 const MAX_ZOOM = 4;
 const PREVIEW_SIDE = 1280;       // longest side of the on-screen preview
 const EXPORT_SIDE = 1920;        // 1080p: longest side of the saved video
-const FILES = ['./', 'index.html', 'style.css', 'app.js', 'engine.js', 'manifest.webmanifest'];
+const FILES = ['./', 'index.html', 'style.css', 'app.js', 'engine.js', 'projects.js', 'manifest.webmanifest'];
 
 const $ = id => document.getElementById(id);
 const app = $('app'), live = $('live'), view = $('view'), vctx = view.getContext('2d');
@@ -272,7 +272,11 @@ async function onRecStopped() {
   clips.push(clip);
   head = totalLen();
   renderAll();
-  // read the clip's frames and sound ready for the playback engine (a moment, in the background)
+  startPrep(clip);
+}
+
+// read a clip's frames and sound ready for the playback engine (a moment, in the background)
+function startPrep(clip) {
   clip.prep = prepareClip(clip).then(() => {
     clip.ready = true;
     if (clip.demux) {
@@ -284,6 +288,7 @@ async function onRecStopped() {
     renderAll();
     buildThumbs(clip);                  // small pictures for instant scrubbing (background)
   });
+  return clip.prep;
 }
 
 // Read the true length and picture size of a new clip (falls back to the stopwatch time)
@@ -965,7 +970,11 @@ $('ov-save').onclick = async () => {
 /* ---------- clear ---------- */
 function clearAll() {
   if (!clips.length) { say('Nothing to clear.', 2000); $('menu').hidden = true; return; }
-  if (!confirm('Delete all ' + clips.length + ' clips from the app and free their space?')) return;
+  if (!confirm('Delete all ' + clips.length + ' clips from the timeline and free their space? (Saved projects are not touched.)')) return;
+  resetTimeline();
+}
+function resetTimeline() {
+  if (typeof pjDetach === 'function') pjDetach();
   stopPlay();
   closeEdit();
   clips.forEach(c => { URL.revokeObjectURL(c.url); c.dead = true; if (c.thumbs) c.thumbs.forEach(t => { try { t.b.close(); } catch (_) {} }); c.thumbs = null; });
@@ -977,7 +986,7 @@ function clearAll() {
 
 /* ---------- screen state ---------- */
 function renderAll() {
-  $('count').textContent = clips.length + '/' + MAX_CLIPS;
+  $('count').textContent = clips.length + '/' + MAX_CLIPS + (typeof pjFlag === 'function' ? pjFlag() : '');
   const full = clips.length >= MAX_CLIPS;
   app.classList.toggle('recording', recording);
   app.classList.toggle('editing', selected >= 0);
