@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver4';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver5';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -9,7 +9,7 @@ const MIN_CLIP = 0.3;            // shortest a trimmed clip can be (seconds)
 const MAX_ZOOM = 4;
 const PREVIEW_SIDE = 1280;       // longest side of the on-screen preview
 const EXPORT_SIDE = 1920;        // 1080p: longest side of the saved video
-const FILES = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest'];
+const FILES = ['./', 'index.html', 'style.css', 'app.js', 'engine.js', 'manifest.webmanifest'];
 
 const $ = id => document.getElementById(id);
 const app = $('app'), live = $('live'), view = $('view'), vctx = view.getContext('2d');
@@ -123,7 +123,7 @@ function startRec() {
   closeEdit();
   showLive();
   const mime = pickMime();
-  const opts = { videoBitsPerSecond: VIDEO_BITRATE, audioBitsPerSecond: AUDIO_BITRATE };
+  const opts = { videoBitsPerSecond: VIDEO_BITRATE, audioBitsPerSecond: AUDIO_BITRATE, videoKeyFrameIntervalDuration: 500 };
   if (mime) opts.mimeType = mime;
   try {
     recorder = new MediaRecorder(stream, opts);
@@ -162,9 +162,21 @@ async function onRecStopped() {
   const url = URL.createObjectURL(blob);
   const info = await probe(url, measured);
   // goes straight to the end of the timeline
-  clips.push({ url, blob, dur: info.dur, inT: 0, outT: info.dur, w: info.w, h: info.h, zoom: 1, px: 0, py: 0 });
+  const clip = { url, blob, dur: info.dur, inT: 0, outT: info.dur, w: info.w, h: info.h, zoom: 1, px: 0, py: 0, ready: false, demux: null, abuf: null };
+  clips.push(clip);
   head = totalLen();
   renderAll();
+  // read the clip's frames and sound ready for the playback engine (a moment, in the background)
+  clip.prep = prepareClip(clip).then(() => {
+    clip.ready = true;
+    if (clip.demux) {
+      const wasFull = clip.outT >= clip.dur - 0.001;
+      clip.dur = clip.demux.duration;
+      clip.outT = wasFull ? clip.dur : Math.min(clip.outT, clip.dur);
+      clip.inT = Math.min(clip.inT, clip.outT - minLen(clip));
+    }
+    renderAll();
+  });
 }
 
 // Read the true length and picture size of a new clip (falls back to the stopwatch time)
@@ -208,8 +220,12 @@ async function loadInto(v, c, t) {
 }
 
 /* ---------- drawing a frame (zoom + reframe are applied here, for preview AND saving) ---------- */
+function srcSize(s) {
+  return s.videoWidth ? [s.videoWidth, s.videoHeight] : [s.displayWidth || s.codedWidth || 0, s.displayHeight || s.codedHeight || 0];
+}
+
 function drawFrame(ctx, W, H, v, c) {
-  const vw = v.videoWidth, vh = v.videoHeight;
+  const [vw, vh] = srcSize(v);
   if (!vw || !vh) return;
   const z = c.zoom || 1;
   const sw = vw / z, sh = vh / z;                       // the part of the picture we keep
@@ -235,10 +251,17 @@ function drawView(v, c) {
 }
 
 function redraw() {
-  if (shown && clips[shown.i]) drawView(shown.v, clips[shown.i]);
+  if (shown && clips[shown.i]) drawView(shown.src, clips[shown.i]);
 }
 
 /* ---------- show one frame (used when scrubbing and editing) ---------- */
+function setShown(sh) {
+  if (shown && shown.own && shown.src && shown.src.close) { try { shown.src.close(); } catch (_) {} }
+  shown = sh;
+}
+function useWC() { return WC_OK && clips.length > 0 && clips.every(c => c.ready && c.demux); }
+function refreshStill() { const loc = locate(head); if (loc) queueShow(loc.i, loc.t); }
+
 let showBusy = false, showWant = null;
 function queueShow(i, t) {
   showWant = { i, t };
@@ -250,12 +273,20 @@ function queueShow(i, t) {
         const w = showWant; showWant = null;
         const c = clips[w.i];
         if (!c) continue;
-        await loadInto(pool[0], c, w.t);
-        await new Promise(r => requestAnimationFrame(r));
-        shown = { v: pool[0], i: w.i };
-        drawView(pool[0], c);
+        if (useWC()) {                                  // decoded frame (fast, exact)
+          const f = await wcFrameAt(c, w.t);
+          if (!f) continue;
+          setShown({ src: f, i: w.i, own: true });
+          drawView(f, c);
+        } else {                                        // video-player method
+          await loadInto(pool[0], c, w.t);
+          await new Promise(r => requestAnimationFrame(r));
+          setShown({ src: pool[0], i: w.i });
+          drawView(pool[0], c);
+        }
       }
-    } finally { showBusy = false; }
+    } catch (e) { console.warn('show frame', e); }
+    finally { showBusy = false; }
   })();
 }
 
@@ -455,8 +486,8 @@ stage.addEventListener('pointerdown', e => {
 });
 stage.addEventListener('pointermove', e => {
   if (!pan) return;
-  const c = clips[selected], v = shown.v;
-  const vw = v.videoWidth, vh = v.videoHeight;
+  const c = clips[selected];
+  const [vw, vh] = srcSize(shown.src);
   const sw = vw / c.zoom, sh = vh / c.zoom;
   const cw = stage.clientWidth, ch = stage.clientHeight;
   const dispW = Math.min(cw, ch * vw / vh), dispH = dispW * vh / vw;
@@ -529,15 +560,35 @@ async function runTimeline(o) {
 /* ---------- play / pause ---------- */
 function stopPlay() {
   playToken++;
+  const was = playing;
   if (playing) { playing = false; pool.forEach(p => p.pause()); }
   renderAll();
+  if (was && useWC()) refreshStill();
 }
 
 async function togglePlay() {
   if (playing) { stopPlay(); return; }
   if (!clips.length || recording || exporting) return;
+  if (WC_OK) getAC();                                   // sound is allowed because this runs inside the tap
+  if (clips.some(c => !c.ready)) await Promise.all(clips.map(c => c.prep));
   if (head >= totalLen() - 0.05) head = 0;
   const loc = locate(head);
+  if (useWC()) {
+    playing = true;
+    const token = ++playToken;
+    showReview();
+    renderAll();
+    const starts = startsOf();
+    await runTimelineWC({
+      startIdx: loc.i, startT: loc.t, out: getAC().destination,
+      stopped: () => token !== playToken,
+      draw: (fr, c) => drawView(fr, c),
+      progress: (i, t) => { head = starts[i] + t; updatePlayhead(); },
+      onClip: i => markNow(i)
+    });
+    if (token === playToken) { playing = false; head = Math.min(head, totalLen()); renderAll(); refreshStill(); }
+    return;
+  }
   playing = true;
   const token = ++playToken;
   showReview();
@@ -552,7 +603,7 @@ async function togglePlay() {
     audio: { on: v => { v.muted = false; }, off: v => { v.muted = true; } },
     startIdx: loc.i, startT: loc.t,
     stopped: () => token !== playToken,
-    draw: (v, i, c) => { shown = { v, i }; drawView(v, c); },
+    draw: (v, i, c) => { setShown({ src: v, i }); drawView(v, c); },
     progress: (i, t) => { head = starts[i] + t; updatePlayhead(); },
     onClip: i => markNow(i)
   });
@@ -576,11 +627,13 @@ async function saveVideo() {
 
   // audio goes into the recording only (not the speaker). Made inside the tap so the phone allows it.
   const AC = window.AudioContext || window.webkitAudioContext;
-  const ac = new AC();
+  const ac = WC_OK ? getAC() : new AC();
   ac.resume();
   const dest = ac.createMediaStreamDestination();
+  if (clips.some(c => !c.ready)) await Promise.all(clips.map(c => c.prep));
+  const wc = useWC();                       // frame engine, or the video-player method as a fallback
   const gains = new Map();
-  const els = [0, 1].map(() => {
+  const els = wc ? [] : [0, 1].map(() => {
     const v = document.createElement('video');
     v.playsInline = true; v.preload = 'auto';
     $('pool').appendChild(v);
@@ -590,8 +643,10 @@ async function saveVideo() {
     gains.set(v, g);
     return v;
   });
-  setSrc(els[0], clips[0]); els[0].play().catch(() => {});
-  if (clips[1]) { setSrc(els[1], clips[1]); els[1].play().catch(() => {}); els[1].pause(); }
+  if (!wc) {
+    setSrc(els[0], clips[0]); els[0].play().catch(() => {});
+    if (clips[1]) { setSrc(els[1], clips[1]); els[1].play().catch(() => {}); els[1].pause(); }
+  }
 
   try {
     const [W, H] = sizeFor(EXPORT_SIDE);
@@ -611,19 +666,30 @@ async function saveVideo() {
     rec.start(1000);
 
     const total = totalLen(), starts = startsOf();
-    await runTimeline({
-      els,
-      audio: { on: v => { gains.get(v).gain.value = 1; }, off: v => { gains.get(v).gain.value = 0; } },
-      startIdx: 0, startT: clips[0].inT,
-      stopped: () => exportCancel,
-      draw: (v, i, c) => drawFrame(ctx, W, H, v, c),
-      progress: (i, t) => { $('bar-fill').style.width = Math.min(100, (starts[i] + t) / total * 100) + '%'; }
-    });
+    const progress = (i, t) => { $('bar-fill').style.width = Math.min(100, (starts[i] + t) / total * 100) + '%'; };
+    if (wc) {
+      await runTimelineWC({
+        startIdx: 0, startT: clips[0].inT, out: dest,
+        stopped: () => exportCancel,
+        draw: (fr, c) => drawFrame(ctx, W, H, fr, c),
+        progress
+      });
+    } else {
+      await runTimeline({
+        els,
+        audio: { on: v => { gains.get(v).gain.value = 1; }, off: v => { gains.get(v).gain.value = 0; } },
+        startIdx: 0, startT: clips[0].inT,
+        stopped: () => exportCancel,
+        draw: (v, i, c) => drawFrame(ctx, W, H, v, c),
+        progress
+      });
+    }
     await new Promise(r => setTimeout(r, 250));   // let the last frame land
     rec.stop();
     await stopped;
     els.forEach(v => { v.pause(); v.removeAttribute('src'); v.load(); v.remove(); });
-    ac.close();
+    if (!WC_OK) ac.close();
+    refreshStill();
     if (exportCancel) { finishExport(); return; }
 
     const type = (rec.mimeType || mime || 'video/webm').split(';')[0];
@@ -643,7 +709,7 @@ async function saveVideo() {
     $('ov-text').textContent = 'Something went wrong: ' + (e && e.message ? e.message : e);
     $('ov-close').textContent = 'Close';
     els.forEach(v => v.remove());
-    try { ac.close(); } catch (_) {}
+    if (!WC_OK) { try { ac.close(); } catch (_) {} }
   }
 }
 
@@ -684,7 +750,7 @@ function clearAll() {
   stopPlay();
   closeEdit();
   clips.forEach(c => URL.revokeObjectURL(c.url));
-  clips = []; head = 0; shown = null;
+  clips = []; head = 0; setShown(null);
   pool.forEach(p => { p.removeAttribute('src'); delete p.dataset.url; });
   $('menu').hidden = true;
   showLive();
@@ -709,6 +775,11 @@ function renderAll() {
   $('golive').hidden = mode !== 'review' || recording;
   if (full && !recording) say('10 clips. Clear all (menu) to start again.');
   else if ($('msg').textContent.startsWith('10 clips')) say('');
+  $('engine-info').textContent = !WC_OK ? 'Engine: video player (this phone lacks frame decoding)'
+    : !clips.length ? 'Engine: frame decoder (ready)'
+    : clips.some(c => !c.ready) ? 'Engine: preparing clip...'
+    : useWC() ? 'Engine: frame decoder (seamless cuts)'
+    : 'Engine: video player. ' + ((clips.find(c => c.why) || {}).why || '');
   renderTimeline();
   markNow(playing ? (locate(head) || {}).i : -1);
   updatePlayhead();

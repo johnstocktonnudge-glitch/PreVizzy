@@ -44,6 +44,7 @@
   <div id="menu" hidden>
     <button id="update" class="pill">Check for updates</button>
     <div id="update-msg"></div>
+    <div id="engine-info"></div>
     <button id="clear" class="pill">Clear all clips</button>
   </div>
 
@@ -102,6 +103,7 @@
 <!-- Two hidden players: one plays while the next waits ready -->
 <div id="pool"><video id="pA" playsinline></video><video id="pB" playsinline></video></div>
 <canvas id="canvas" hidden></canvas>
+<script src="engine.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
