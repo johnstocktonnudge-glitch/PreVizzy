@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver11';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver12';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -363,6 +363,16 @@ function setShown(sh) {
 function useWC() { return WC_OK && clips.length > 0 && clips.every(c => c.ready && c.demux); }
 function refreshStill() { const loc = locate(head); if (loc) queueShow(loc.i, loc.t); }
 
+// a plain copy of the picture being edited, so zoom / reframe never depend on a decoder frame staying valid
+const stillCv = document.createElement('canvas'), stillCtx = stillCv.getContext('2d');
+function snap(src) {
+  try {
+    const [w, h] = srcSize(src); if (!w || !h) return false;
+    if (stillCv.width !== w || stillCv.height !== h) { stillCv.width = w; stillCv.height = h; }
+    stillCtx.drawImage(src, 0, 0, w, h);
+    return true;
+  } catch (e) { return false; }
+}
 let showBusy = false, showWant = null, stillWhy = '';
 function queueShow(i, t) {
   showWant = { i, t };
@@ -378,19 +388,23 @@ function queueShow(i, t) {
           if (fastScrub) continue;
           let f = null;
           try { f = await wcFrameAt(c, w.t); } catch (e) { console.warn('frame decoder', e); closeScrubDecoder(); stillWhy = e && (e.message || e.name); }
-          if (f) { setShown({ src: f, i: w.i, own: true }); drawView(f, c); continue; }
+          if (f) {
+            if (snap(f)) { f.close(); setShown({ src: stillCv, i: w.i }); drawView(stillCv, c); }
+            else { setShown({ src: f, i: w.i, own: true }); drawView(f, c); }
+            continue;
+          }
           // the frame decoder gave nothing: use a video player for this picture instead
           closeScrubDecoder();
           await loadInto(pool[0], c, w.t);
           await new Promise(r => requestAnimationFrame(r));
-          setShown({ src: pool[0], i: w.i });
-          drawView(pool[0], c);
+          if (snap(pool[0])) { setShown({ src: stillCv, i: w.i }); drawView(stillCv, c); }
+          else { setShown({ src: pool[0], i: w.i }); drawView(pool[0], c); }
           if (stillWhy) { say('Frame decoder problem: ' + stillWhy, 4000); stillWhy = ''; }
         } else {                                        // video-player method
           await loadInto(pool[0], c, w.t);
           await new Promise(r => requestAnimationFrame(r));
-          setShown({ src: pool[0], i: w.i });
-          drawView(pool[0], c);
+          if (snap(pool[0])) { setShown({ src: stillCv, i: w.i }); drawView(stillCv, c); }
+          else { setShown({ src: pool[0], i: w.i }); drawView(pool[0], c); }
         }
       }
     } catch (e) { console.warn('show frame', e); }
@@ -551,6 +565,7 @@ window.addEventListener('resize', () => { cacheRects(); updatePlayhead(); render
 /* ---------- editing a clip: Trim, Zoom, Reframe ---------- */
 function openEdit(i) {
   selected = i;
+  fastScrub = false;
   $('edit').hidden = false;
   setTab(tab);
   renderAll();
@@ -658,6 +673,7 @@ $('rreset').onclick = () => { const c = clips[selected]; if (!c) return; c.px = 
 // make sure the edited clip's picture is on screen, then redraw it
 function showClipFrameForEdit() {
   const c = clips[selected]; if (!c) return;
+  fastScrub = false;
   stopPlay();
   showReview();
   if (shown && shown.i === selected) { redraw(); return; }
@@ -678,6 +694,7 @@ stage.addEventListener('pointermove', e => {
   if (!pan) return;
   const c = clips[selected];
   const [vw, vh] = srcSize(shown.src);
+  if (!vw || !vh) return;
   const sw = vw / c.zoom, sh = vh / c.zoom;
   const cw = stage.clientWidth, ch = stage.clientHeight;
   const dispW = Math.min(cw, ch * vw / vh), dispH = dispW * vh / vw;
