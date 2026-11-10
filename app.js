@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver8';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver9';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -26,6 +26,7 @@ let selected = -1;         // clip being edited (-1 = none)
 let tab = 'trim';
 let mode = 'live';         // 'live' camera or 'review' of the timeline
 let shown = null;          // {v, i}: which player/clip is on screen
+let clipSeq = 0;
 let stream = null, facing = 'environment';
 let recorder = null, chunks = [], recStart = 0, recTimer = null;
 let recording = false, playing = false, exporting = false, playToken = 0;
@@ -245,7 +246,7 @@ async function onRecStopped() {
   const url = URL.createObjectURL(blob);
   const info = await probe(url, measured);
   // goes straight to the end of the timeline
-  const clip = { url, blob, dur: info.dur, inT: 0, outT: info.dur, w: info.w, h: info.h, zoom: 1, px: 0, py: 0, ready: false, demux: null, abuf: null };
+  const clip = { id: ++clipSeq, url, blob, dur: info.dur, inT: 0, outT: info.dur, w: info.w, h: info.h, zoom: 1, px: 0, py: 0, ready: false, demux: null, abuf: null };
   clips.push(clip);
   head = totalLen();
   renderAll();
@@ -346,7 +347,7 @@ function setShown(sh) {
 function useWC() { return WC_OK && clips.length > 0 && clips.every(c => c.ready && c.demux); }
 function refreshStill() { const loc = locate(head); if (loc) queueShow(loc.i, loc.t); }
 
-let showBusy = false, showWant = null;
+let showBusy = false, showWant = null, stillWhy = '';
 function queueShow(i, t) {
   showWant = { i, t };
   if (showBusy) return;
@@ -358,10 +359,16 @@ function queueShow(i, t) {
         const c = clips[w.i];
         if (!c) continue;
         if (useWC()) {                                  // decoded frame (fast, exact)
-          const f = await wcFrameAt(c, w.t);
-          if (!f) continue;
-          setShown({ src: f, i: w.i, own: true });
-          drawView(f, c);
+          let f = null;
+          try { f = await wcFrameAt(c, w.t); } catch (e) { console.warn('frame decoder', e); closeScrubDecoder(); stillWhy = e && (e.message || e.name); }
+          if (f) { setShown({ src: f, i: w.i, own: true }); drawView(f, c); continue; }
+          // the frame decoder gave nothing: use a video player for this picture instead
+          closeScrubDecoder();
+          await loadInto(pool[0], c, w.t);
+          await new Promise(r => requestAnimationFrame(r));
+          setShown({ src: pool[0], i: w.i });
+          drawView(pool[0], c);
+          if (stillWhy) { say('Frame decoder problem: ' + stillWhy, 4000); stillWhy = ''; }
         } else {                                        // video-player method
           await loadInto(pool[0], c, w.t);
           await new Promise(r => requestAnimationFrame(r));
@@ -403,7 +410,7 @@ function renderTimeline() {
     b.className = 'clip' + (i === selected ? ' sel' : '') + (i === playIdx ? ' now' : '') + (i === movingIdx ? ' moving' : '');
     b.style.flexGrow = Math.max(0.05, eff[i]);
     const jn = i < clips.length - 1 && joinOf(c) !== 'b' ? '<span class="jn">' + (joinOf(c) === 'f2' ? '2s' : '4s') + '</span>' : '';
-    b.innerHTML = '<b>' + (i + 1) + '</b>' + fmt(lenOf(c)) + jn;
+    b.innerHTML = '<b>' + (c.id || i + 1) + '</b>' + fmt(lenOf(c)) + jn;
     tlClips.appendChild(b);
   });
   cacheRects();
@@ -476,11 +483,21 @@ tl.addEventListener('pointerdown', e => {
 tl.addEventListener('pointermove', e => {
   if (!tp) return;
   if (tp.mv) {
+    if (tp.lock) {                                      // one place per swipe: wait until the finger pauses
+      clearTimeout(tp.unlock);
+      const me = tp;
+      tp.unlock = setTimeout(() => { if (tp === me) { me.lock = false; me.ax = me.lastX; } }, 220);
+      tp.lastX = e.clientX;
+      return;
+    }
+    tp.lastX = e.clientX;
     const dx = e.clientX - tp.ax;
     if (Math.abs(dx) > 45) {
       const j = tp.idx + (dx > 0 ? 1 : -1);
       if (j >= 0 && j < clips.length) { swapClips(tp.idx, j); tp.idx = j; }
-      tp.ax = e.clientX;
+      tp.lock = true; tp.lastX = e.clientX;
+      const me = tp;
+      tp.unlock = setTimeout(() => { if (tp === me) { me.lock = false; me.ax = me.lastX; } }, 220);
     }
     return;
   }
@@ -489,7 +506,7 @@ tl.addEventListener('pointermove', e => {
 });
 const tlEnd = e => {
   if (!tp) return;
-  clearTimeout(tp.timer);
+  clearTimeout(tp.timer); clearTimeout(tp.unlock);
   const wasTap = !tp.moved && !tp.mv;
   const wasMove = tp.mv;
   tp = null;
@@ -530,13 +547,13 @@ $('edit-done').onclick = closeEdit;
 function renderEdit() {
   const c = clips[selected];
   if (!c) return;
-  $('edit-title').textContent = 'Clip ' + (selected + 1);
+  $('edit-title').textContent = 'Clip ' + (c.id || selected + 1);
   renderTrimBar();
   $('zoom').value = c.zoom;
   $('zoomv').textContent = c.zoom.toFixed(1) + 'x';
   const last = selected >= clips.length - 1;
   document.querySelectorAll('.jbtn').forEach(b => { b.classList.toggle('on', !last && joinOf(c) === b.dataset.join); b.disabled = last; });
-  $('jhint').textContent = last ? 'Last clip: nothing after it.' : 'Clip ' + (selected + 1) + ' into ' + (selected + 2) + ':';
+  $('jhint').textContent = last ? 'Last clip: nothing after it.' : 'Clip ' + (c.id || selected + 1) + ' into ' + ((clips[selected + 1] && clips[selected + 1].id) || selected + 2) + ':';
   $('rhint').textContent = c.zoom > 1 ? 'Drag the picture to move it.' : 'Zoom in first (Zoom tab), then drag the picture.';
 }
 
@@ -895,7 +912,7 @@ function clearAll() {
   stopPlay();
   closeEdit();
   clips.forEach(c => URL.revokeObjectURL(c.url));
-  clips = []; head = 0; setShown(null);
+  clips = []; head = 0; clipSeq = 0; setShown(null);
   pool.forEach(p => { p.removeAttribute('src'); delete p.dataset.url; });
   $('menu').hidden = true;
   showLive();
