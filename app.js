@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver19';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver20';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -386,6 +386,20 @@ function setShown(sh) {
   if (shown && shown.own && shown.src && shown.src.close) { try { shown.src.close(); } catch (_) {} }
   shown = sh;
 }
+function useStillBox() { return selected >= 0 && mode === 'review' && !playing && (tab === 'zoom' || tab === 'reframe') && !!shown && shown.src === stillCv && shown.i === selected; }
+function syncStill() {
+  const box = $('stillbox'), on = useStillBox();
+  if (!on) { if (!box.hidden) { box.hidden = true; view.style.visibility = ''; redraw(); } return; }
+  const c = clips[selected];
+  if (stillCv.parentNode !== box) box.appendChild(stillCv);
+  const vw = stillCv.width, vh = stillCv.height, cw = stage.clientWidth, ch = stage.clientHeight;
+  const dw = Math.min(cw, ch * vw / vh), dh = dw * vh / vw;
+  box.style.width = dw + 'px'; box.style.height = dh + 'px';
+  const z = c.zoom || 1;
+  stillCv.style.transformOrigin = (50 + 50 * (c.px || 0)) + '% ' + (50 + 50 * (c.py || 0)) + '%';
+  stillCv.style.transform = 'scale(' + z + ')';
+  box.hidden = false; view.style.visibility = 'hidden';
+}
 function useWC() { return WC_OK && clips.length > 0 && clips.every(c => c.ready && c.demux); }
 function refreshStill() { const loc = locate(head); if (loc) queueShow(loc.i, loc.t); }
 
@@ -413,9 +427,13 @@ function queueShow(i, t) {
         if (useWC()) {                                  // decoded frame (fast, exact)
           if (fastScrub) continue;
           let f = null;
-          try { f = await wcFrameAt(c, w.t); } catch (e) { console.warn('frame decoder', e); closeScrubDecoder(); stillWhy = e && (e.message || e.name); }
+          try { f = await wcFrameAt(c, w.t); }
+          catch (e) {
+            closeScrubDecoder();
+            try { f = await wcFrameAt(c, w.t); } catch (e2) { console.warn('frame decoder', e2); closeScrubDecoder(); stillWhy = e2 && (e2.message || e2.name); }   // one quiet retry
+          }
           if (f) {
-            if (snap(f)) { f.close(); setShown({ src: stillCv, i: w.i }); drawView(stillCv, c); }
+            if (snap(f)) { f.close(); setShown({ src: stillCv, i: w.i }); drawView(stillCv, c); syncStill(); }
             else { setShown({ src: f, i: w.i, own: true }); drawView(f, c); }
             continue;
           }
@@ -423,13 +441,13 @@ function queueShow(i, t) {
           closeScrubDecoder();
           await loadInto(pool[0], c, w.t);
           await new Promise(r => requestAnimationFrame(r));
-          if (snap(pool[0])) { setShown({ src: stillCv, i: w.i }); drawView(stillCv, c); }
+          if (snap(pool[0])) { setShown({ src: stillCv, i: w.i }); drawView(stillCv, c); syncStill(); }
           else { setShown({ src: pool[0], i: w.i }); drawView(pool[0], c); }
           if (stillWhy) { say('Frame decoder problem: ' + stillWhy, 4000); stillWhy = ''; }
         } else {                                        // video-player method
           await loadInto(pool[0], c, w.t);
           await new Promise(r => requestAnimationFrame(r));
-          if (snap(pool[0])) { setShown({ src: stillCv, i: w.i }); drawView(stillCv, c); }
+          if (snap(pool[0])) { setShown({ src: stillCv, i: w.i }); drawView(stillCv, c); syncStill(); }
           else { setShown({ src: pool[0], i: w.i }); drawView(pool[0], c); }
         }
       }
@@ -591,7 +609,7 @@ const tlEnd = e => {
 tl.addEventListener('pointerup', tlEnd);
 tl.addEventListener('pointercancel', tlEnd);
 function setTopH() { document.documentElement.style.setProperty('--topbar-h', ($('top').offsetHeight - 8) + 'px'); }
-window.addEventListener('resize', () => { setTopH(); cacheRects(); updatePlayhead(); renderTrimBar(); });
+window.addEventListener('resize', () => { setTopH(); syncStill(); cacheRects(); updatePlayhead(); renderTrimBar(); });
 
 /* ---------- editing a clip: Trim, Zoom, Reframe ---------- */
 function openEdit(i) {
@@ -611,6 +629,7 @@ function closeEdit() {
 
 function setTab(name) {
   tab = name;
+  syncStill();
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
   ['trim', 'zoom', 'reframe', 'join'].forEach(n => { $('pane-' + n).hidden = n !== name; });
   $('tinfo').hidden = name !== 'trim';
@@ -710,7 +729,7 @@ function showClipFrameForEdit() {
   fastScrub = false;
   stopPlay();
   showReview();
-  if (shown && shown.i === selected) { redraw(); return; }
+  if (shown && shown.i === selected) { redraw(); syncStill(); return; }
   const loc = locate(head);
   queueShow(selected, loc && loc.i === selected ? loc.t : c.inT);
 }
@@ -736,7 +755,7 @@ stage.addEventListener('pointermove', e => {
   // finger right = picture right = crop window moves left
   c.px = Math.max(-1, Math.min(1, pan.px - (dx * sw / dispW) / ((vw - sw) / 2)));
   c.py = Math.max(-1, Math.min(1, pan.py - (dy * sh / dispH) / ((vh - sh) / 2)));
-  redraw();
+  redraw(); syncStill();
 });
 const panEnd = () => { pan = null; };
 stage.addEventListener('pointerup', panEnd);
@@ -1006,6 +1025,7 @@ function resetTimeline() {
 /* ---------- screen state ---------- */
 function renderAll() {
   setTopH();
+  syncStill();
   $('count').textContent = clips.length + '/' + MAX_CLIPS + (typeof pjFlag === 'function' ? pjFlag() : '');
   const full = clips.length >= MAX_CLIPS;
   app.classList.toggle('recording', recording);

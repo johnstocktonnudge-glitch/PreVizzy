@@ -452,12 +452,14 @@ async function runTimelineWC(o) {
 
 
 /* small pictures of the whole clip, made once in the background, so scrubbing is instant */
-async function buildThumbs(c) {
+let thumbsChain = Promise.resolve();
+function buildThumbs(c) { thumbsChain = thumbsChain.then(() => buildThumbsNow(c)).catch(() => {}); }   // one clip at a time
+async function buildThumbsNow(c) {
   if (!WC_OK || !c.demux || c.thumbs || c.thumbsBusy) return;
   c.thumbsBusy = true;
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   try {
-    while ((playing || recording || exporting) && !c.dead) await sleep(300);   // wait until the phone is idle
+    while ((playing || recording || exporting || selected >= 0) && !c.dead) await sleep(300);   // wait until the phone is idle
     if (c.dead) return;
     const d = c.demux, S = d.video.samples, step = c.dur <= 20 ? 0.1 : 0.2;
     const out = []; let nextT = 0, pending = 0, bad = false;
@@ -476,7 +478,7 @@ async function buildThumbs(c) {
     if (d.video.description) cfg.description = d.video.description;
     dec.configure(cfg);
     for (let j = 0; j < S.length && !bad && !c.dead; j++) {
-      while ((dec.decodeQueueSize > 8 || playing || recording || exporting) && !bad && !c.dead) await sleep(playing ? 200 : 4);
+      while ((dec.decodeQueueSize > 8 || playing || recording || exporting || selected >= 0) && !bad && !c.dead) await sleep(playing ? 200 : 4);
       const s = S[j];
       dec.decode(new EncodedVideoChunk({ type: s.key ? 'key' : 'delta', timestamp: Math.round(s.t * 1e6), duration: Math.round(s.dur * 1e6), data: d.u8.subarray(s.off, s.off + s.size) }));
     }
