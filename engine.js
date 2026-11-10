@@ -445,3 +445,43 @@ async function runTimelineWC(o) {
     tick();
   });
 }
+
+
+/* small pictures of the whole clip, made once in the background, so scrubbing is instant */
+async function buildThumbs(c) {
+  if (!WC_OK || !c.demux || c.thumbs || c.thumbsBusy) return;
+  c.thumbsBusy = true;
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  try {
+    while ((playing || recording || exporting) && !c.dead) await sleep(300);   // wait until the phone is idle
+    if (c.dead) return;
+    const d = c.demux, S = d.video.samples, step = c.dur <= 20 ? 0.1 : 0.2;
+    const out = []; let nextT = 0, pending = 0, bad = false;
+    const dec = new VideoDecoder({
+      output: f => {
+        const t = f.timestamp / 1e6;
+        if (t >= nextT - 1e-4) {
+          nextT = t + step; pending++;
+          const w = 256, h = Math.max(2, Math.round(w * (f.displayHeight || f.codedHeight) / (f.displayWidth || f.codedWidth)));
+          createImageBitmap(f, { resizeWidth: w, resizeHeight: h }).then(b => out.push({ t, b })).catch(() => {}).finally(() => { pending--; f.close(); });
+        } else f.close();
+      },
+      error: () => { bad = true; }
+    });
+    const cfg = { codec: d.video.codec };
+    if (d.video.description) cfg.description = d.video.description;
+    dec.configure(cfg);
+    for (let j = 0; j < S.length && !bad && !c.dead; j++) {
+      while (dec.decodeQueueSize > 8 && !bad) await sleep(4);
+      const s = S[j];
+      dec.decode(new EncodedVideoChunk({ type: s.key ? 'key' : 'delta', timestamp: Math.round(s.t * 1e6), duration: Math.round(s.dur * 1e6), data: d.u8.subarray(s.off, s.off + s.size) }));
+    }
+    if (!bad) { try { await dec.flush(); } catch (_) {} }
+    try { dec.close(); } catch (_) {}
+    for (let k = 0; k < 100 && pending > 0; k++) await sleep(20);
+    out.sort((x, y) => x.t - y.t);
+    if (c.dead) out.forEach(o => { try { o.b.close(); } catch (_) {} });
+    else if (out.length && !bad) c.thumbs = out;
+  } catch (e) { console.warn('thumbs', e); }
+  finally { c.thumbsBusy = false; }
+}

@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver10';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver11';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -275,6 +275,7 @@ async function onRecStopped() {
       clip.inT = Math.min(clip.inT, clip.outT - minLen(clip));
     }
     renderAll();
+    buildThumbs(clip);                  // small pictures for instant scrubbing (background)
   });
 }
 
@@ -320,7 +321,7 @@ async function loadInto(v, c, t) {
 
 /* ---------- drawing a frame (zoom + reframe are applied here, for preview AND saving) ---------- */
 function srcSize(s) {
-  return s.videoWidth ? [s.videoWidth, s.videoHeight] : [s.displayWidth || s.codedWidth || 0, s.displayHeight || s.codedHeight || 0];
+  return s.videoWidth ? [s.videoWidth, s.videoHeight] : [s.displayWidth || s.codedWidth || s.width || 0, s.displayHeight || s.codedHeight || s.height || 0];
 }
 
 function drawFrame(ctx, W, H, v, c, alpha, over) {
@@ -374,6 +375,7 @@ function queueShow(i, t) {
         const c = clips[w.i];
         if (!c) continue;
         if (useWC()) {                                  // decoded frame (fast, exact)
+          if (fastScrub) continue;
           let f = null;
           try { f = await wcFrameAt(c, w.t); } catch (e) { console.warn('frame decoder', e); closeScrubDecoder(); stillWhy = e && (e.message || e.name); }
           if (f) { setShown({ src: f, i: w.i, own: true }); drawView(f, c); continue; }
@@ -396,13 +398,23 @@ function queueShow(i, t) {
   })();
 }
 
-function goTo(T) {                       // move the playhead and show that frame
+let fastScrub = false;
+function thumbAt(c, t) {
+  const th = c.thumbs; let lo = 0, hi = th.length - 1;
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (th[m].t <= t + 1e-4) lo = m; else hi = m - 1; }
+  return th[lo];
+}
+function goTo(T, fast) {                  // move the playhead and show that frame
   const total = totalLen();
   head = Math.max(0, Math.min(T, total));
   const loc = locate(head);
   if (!loc) return;
   showReview();
-  queueShow(loc.i, loc.t);
+  const cl = clips[loc.i];
+  if (fast && cl.thumbs && cl.thumbs.length) {         // dragging: show the nearest small picture straight away
+    fastScrub = true;
+    drawView(thumbAt(cl, loc.t).b, cl);
+  } else queueShow(loc.i, loc.t);
   updatePlayhead();
 }
 
@@ -517,14 +529,15 @@ tl.addEventListener('pointermove', e => {
     return;
   }
   if (!tp.moved && Math.abs(e.clientX - tp.x) > 8) { tp.moved = true; clearTimeout(tp.timer); stopPlay(); }
-  if (tp.moved) goTo(xToT(e.clientX));
+  if (tp.moved) goTo(xToT(e.clientX), true);
 });
 const tlEnd = e => {
   if (!tp) return;
   clearTimeout(tp.timer); clearTimeout(tp.unlock);
   const wasTap = !tp.moved && !tp.mv;
-  const wasMove = tp.mv;
+  const wasMove = tp.mv, wasScrub = tp.moved;
   tp = null;
+  if (wasScrub && fastScrub) { fastScrub = false; refreshStill(); }       // finger lifted: show the exact frame
   if (wasMove) { movingIdx = -1; renderTimeline(); return; }
   if (wasTap && e.type === 'pointerup') {
     const h = hit(e.clientX);
@@ -926,7 +939,7 @@ function clearAll() {
   if (!confirm('Delete all ' + clips.length + ' clips from the app and free their space?')) return;
   stopPlay();
   closeEdit();
-  clips.forEach(c => URL.revokeObjectURL(c.url));
+  clips.forEach(c => { URL.revokeObjectURL(c.url); c.dead = true; if (c.thumbs) c.thumbs.forEach(t => { try { t.b.close(); } catch (_) {} }); c.thumbs = null; });
   clips = []; head = 0; clipSeq = 0; setShown(null);
   pool.forEach(p => { p.removeAttribute('src'); delete p.dataset.url; });
   $('menu').hidden = true;
@@ -1005,7 +1018,7 @@ $('update').onclick = async () => {
       }
       if (window.caches) { const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); }
       await Promise.all(FILES.map(f => fetch(f, { cache: 'reload' }).catch(() => {})));
-      location.reload();
+      location.replace(location.pathname + '?v=' + encodeURIComponent(found[1]) + '&t=' + Date.now());
     } else {
       m.textContent = 'Up to date (' + APP_VER + ')';
     }
