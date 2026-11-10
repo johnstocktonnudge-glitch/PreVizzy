@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver25';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver26';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -1147,6 +1147,53 @@ window.addEventListener('pointerdown', e => {
   const t = e.target;
   dbg('down ' + (t.id || t.className || t.tagName) + ' ' + Math.round(e.clientX) + ',' + Math.round(e.clientY) + ' mode=' + mode + ' head=' + head.toFixed(2) + ' tab=' + tab);
 }, true);
+
+/* ---------- camera report: what this phone + Chrome really allow ---------- */
+async function cameraReport() {
+  const out = [], P = s => { out.push(s); $('rep-text').textContent = out.join('\n'); };
+  $('rep').hidden = false; $('menu').hidden = true;
+  P('PreVizzy ' + APP_VER + ' camera report');
+  P(navigator.userAgent.replace(/^Mozilla\/5.0 /, ''));
+  const sup = navigator.mediaDevices.getSupportedConstraints ? Object.keys(navigator.mediaDevices.getSupportedConstraints()) : [];
+  P('\nCHROME KNOWS THESE CAMERA CONTROLS:\n' + sup.join(', '));
+  const fmt = v => v && typeof v === 'object' ? (Array.isArray(v) ? v.join('/') : (v.min !== undefined ? v.min + '..' + v.max : JSON.stringify(v))) : String(v);
+  const show = o => Object.keys(o).filter(k => k !== 'deviceId' && k !== 'groupId').map(k => '  ' + k + ': ' + fmt(o[k])).join('\n');
+  if (track) {
+    try { P('\nOPEN LENS - NOW DOING:\n' + show(track.getSettings())); } catch (e) {}
+    try { P('\nOPEN LENS - THIS PHONE CAN SET:\n' + show(track.getCapabilities())); } catch (e) { P('capabilities: none'); }
+  }
+  P('\nRESOLUTION TESTS (this lens, each asked exactly):');
+  const id = lensId, wasLive = !!stream;
+  if (wasLive) stopCamera();
+  const tests = [[1280, 720, 30], [1920, 1080, 30], [1920, 1080, 60], [2560, 1440, 30], [3840, 2160, 30], [3840, 2160, 60]];
+  for (const [w, h, f] of tests) {
+    const v = { width: { exact: w }, height: { exact: h }, frameRate: { exact: f } };
+    if (id) v.deviceId = { exact: id }; else v.facingMode = { ideal: 'environment' };
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ video: v });
+      const st = s.getVideoTracks()[0].getSettings();
+      s.getTracks().forEach(t => t.stop());
+      P('  ' + w + 'x' + h + ' @' + f + ': OK, got ' + st.width + 'x' + st.height + ' @' + Math.round(st.frameRate || 0));
+    } catch (e) { P('  ' + w + 'x' + h + ' @' + f + ': NO (' + (e.name || e) + ')'); }
+    await new Promise(r => setTimeout(r, 250));
+  }
+  P('\nRECORDER (MediaRecorder) CAN SAVE:');
+  const mts = ['video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=avc1.640028', 'video/mp4;codecs=hvc1.1.6.L120.90', 'video/mp4;codecs=hvc1.2.4.L153.B0', 'video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm;codecs=vp09.02.10.10', 'video/webm;codecs=av01.0.08M.10'];
+  for (const t of mts) P('  ' + t.replace('video/', '') + ': ' + (window.MediaRecorder && MediaRecorder.isTypeSupported(t) ? 'yes' : 'no'));
+  P('\nENCODER (WebCodecs) 1080p:');
+  const ecs = [['H.264 High 8-bit', 'avc1.640028'], ['HEVC Main 8-bit', 'hvc1.1.6.L120.90'], ['HEVC Main10 10-bit', 'hvc1.2.4.L153.B0'], ['VP9 10-bit', 'vp09.02.10.10'], ['AV1 10-bit', 'av01.0.08M.10']];
+  for (const [n, cc] of ecs) {
+    try {
+      const r = window.VideoEncoder ? await VideoEncoder.isConfigSupported({ codec: cc, width: 1920, height: 1080, framerate: 30, bitrate: 8e6 }) : null;
+      P('  ' + n + ': ' + (r && r.supported ? 'yes' : 'no'));
+    } catch (e) { P('  ' + n + ': no'); }
+  }
+  try { P('\nSCREEN: HDR ' + (matchMedia('(dynamic-range: high)').matches ? 'yes' : 'no') + ', wide colour ' + (matchMedia('(color-gamut: p3)').matches ? 'yes' : 'no')); } catch (e) {}
+  P('\n(done - screenshot this and send it)');
+  if (wasLive) startCamera();
+}
+$('repbtn').onclick = () => { if (recording || exporting) { say('Stop first.', 2000); return; } cameraReport(); };
+$('rep-close').onclick = () => { $('rep').hidden = true; };
 $('dbgbtn').onclick = () => { const d = $('dbg'); d.hidden = !d.hidden; $('dbgbtn').textContent = d.hidden ? 'Show debug log' : 'Hide debug log'; d.textContent = dbgLines.join('\n'); $('menu').hidden = true; };
 stage.addEventListener('click', e => {
   if (e.target.closest('button')) return;

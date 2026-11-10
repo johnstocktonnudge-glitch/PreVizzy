@@ -51,6 +51,7 @@
     <div id="update-msg"></div>
     <div id="engine-info"></div>
     <button id="dbgbtn" class="pill">Show debug log</button>
+    <button id="repbtn" class="pill">Camera report</button>
     <button id="pj-open" class="pill">Projects</button>
     <button id="pj-saveas" class="pill">Save project as...</button>
     <button id="pj-new" class="pill">New project</button>
@@ -121,6 +122,7 @@
 <!-- Two hidden players: one plays while the next waits ready -->
 <div id="pj" hidden><div class="card"><div id="pj-body"></div></div></div>
 
+<div id="rep" hidden><button id="rep-close" class="pill">Close</button><pre id="rep-text"></pre></div>
 <pre id="dbg" hidden></pre>
 <div id="pool"><video id="pA" playsinline></video><video id="pB" playsinline></video></div>
 <canvas id="canvas" hidden></canvas>

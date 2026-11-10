@@ -138,3 +138,7 @@ button { font:inherit; color:var(--text); }
 #stillbox { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); overflow:hidden; background:#000; }
 #stillbox canvas { display:block; width:100%; height:100%; will-change:transform; }
 #app.mono #stillbox canvas { filter:grayscale(1); }
+
+#rep { position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.94); color:#cfc; overflow:auto; padding:8px; }
+#rep[hidden] { display:none; }
+#rep-text { margin:8px 0 0; font:11px/1.3 monospace; white-space:pre-wrap; user-select:text; -webkit-user-select:text; }
