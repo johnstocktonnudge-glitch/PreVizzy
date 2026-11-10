@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver24';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver25';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -51,7 +51,7 @@ const clock = s => { s = Math.max(0, s); return Math.floor(s / 60) + ':' + Strin
 const once = (el, ev) => new Promise(r => el.addEventListener(ev, r, { once: true }));
 const lenOf = c => c.outT - c.inT;
 const minLen = c => Math.min(MIN_CLIP, c.dur / 2);
-const JOINS = { b: 6 / 30, f2: 2, f4: 4 };     // blend (6 frames) / 2 second fade / 4 second fade
+const JOINS = { b: 4 / 30, f2: 2, f4: 4 };     // blend (4 frames) / 2 second fade / 4 second fade
 const joinOf = c => (c && c.join) || 'b';
 const wcPossible = () => WC_OK && clips.every(c => !c.ready || c.demux);
 // how much clip i overlaps clip i+1 (seconds). Kept inside what the clips can give.
