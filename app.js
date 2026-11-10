@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver2';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver3';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -46,8 +46,10 @@ function stopCamera() {
   stream = null;
 }
 
+let camTries = 0;
 async function startCamera() {
   stopCamera();
+  say('Starting camera...');
   const video = { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } };
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video, audio: true });
@@ -56,14 +58,20 @@ async function startCamera() {
       stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
       say('No microphone: clips will be silent.', 5000);
     } catch (e2) {
-      say('Camera blocked. Allow camera access for this app.');
+      say('Camera problem: ' + (e2.name || '') + ' ' + (e2.message || '') + '  (tap here to retry)');
       stream = null;
     }
   }
   if (stream) {
     live.srcObject = stream;
     live.play().catch(() => {});
-    say('');
+    if ($('msg').textContent.startsWith('Starting')) say('');
+    // black picture check: if no frames arrive, try once more
+    const mine = stream;
+    setTimeout(() => {
+      if (stream === mine && !recording && live.videoWidth === 0 && camTries < 2) { camTries++; startCamera(); }
+      else if (stream === mine && live.videoWidth > 0) camTries = 0;
+    }, 2500);
   }
   renderAll();
 }
@@ -502,6 +510,10 @@ $('update').onclick = async () => {
 };
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+
+// let go of the camera when the app closes or reloads, so the next start is clean
+window.addEventListener('pagehide', stopCamera);
+$('stage').addEventListener('click', () => { if (!stream && !recording && !exporting) startCamera(); });
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && !recording && !exporting) {

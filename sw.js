@@ -1,7 +1,7 @@
 /* PreVizzy service worker: keeps the app working offline.
    Network first (so updates arrive), cache as the offline fallback.
    Bump CACHE together with APP_VER in app.js every release. */
-const CACHE = 'previzzy-v2';
+const CACHE = 'previzzy-v3';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
