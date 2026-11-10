@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="PreVizzy">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
@@ -15,52 +16,75 @@
 </head>
 <body>
 
-<header>
-  <h1>PreVizzy</h1>
-  <span id="count">Clips 0/10</span>
-</header>
+<div id="app">
 
-<main>
-  <!-- Video area: live camera, or playback of the timeline -->
-  <section id="stage">
+  <!-- Full screen picture: live camera, or the timeline preview -->
+  <div id="stage">
     <video id="live" playsinline muted autoplay></video>
-    <video id="play" playsinline hidden></video>
-    <video id="play2" playsinline hidden style="visibility:hidden"></video>
-    <div id="rec-badge" hidden>&#9679; REC <span id="rec-time">0:00</span></div>
-    <button id="backlive" hidden>Back to camera</button>
+    <canvas id="view" hidden></canvas>
+    <button id="center-play" aria-label="Play" hidden></button>
     <div id="msg"></div>
-  </section>
-
-  <div id="panel">
-    <!-- Record row -->
-    <section id="controls">
-      <button id="flip" class="side">Flip</button>
-      <button id="rec" aria-label="Record / Stop"><span></span></button>
-      <button id="playall" class="side">Play all</button>
-    </section>
-
-    <!-- Timeline: clips in order, newest on the right -->
-    <section id="timeline-wrap">
-      <div id="timeline"></div>
-      <div id="trim" hidden>
-        <div class="row"><label for="trim-in">Start</label><input id="trim-in" type="range" min="0" max="1" step="0.1" value="0"></div>
-        <div class="row"><label for="trim-out">End</label><input id="trim-out" type="range" min="0" max="1" step="0.1" value="1"></div>
-        <div id="trim-info"></div>
-      </div>
-    </section>
-
-    <section id="actions">
-      <button id="save">Save video</button>
-      <button id="clear" class="quiet">Clear all</button>
-    </section>
   </div>
-</main>
 
-<footer>
-  <span id="ver"></span>
-  <button id="update" class="quiet">Check for updates</button>
-  <span id="update-msg"></span>
-</footer>
+  <!-- Record button: right of the picture, like a camera app -->
+  <button id="rec" aria-label="Record / Stop"><span></span></button>
+
+  <!-- Top bar -->
+  <div id="top">
+    <span id="ver"></span>
+    <span id="count">Clips 0/10</span>
+    <span id="rec-badge" hidden>&#9679; REC <span id="rec-time">0:00</span></span>
+    <span class="grow"></span>
+    <button id="golive" class="pill" hidden>Camera</button>
+    <button id="flip" class="pill">Flip</button>
+    <button id="save" class="pill accent">Save</button>
+    <button id="more" class="pill" aria-label="More">&#8943;</button>
+  </div>
+
+  <div id="menu" hidden>
+    <button id="update" class="pill">Check for updates</button>
+    <div id="update-msg"></div>
+    <button id="clear" class="pill">Clear all clips</button>
+  </div>
+
+  <!-- Bottom: edit panel, transport, timeline -->
+  <div id="bottom">
+
+    <div id="edit" hidden>
+      <div id="tabs">
+        <button data-tab="trim" class="tab on">Trim</button>
+        <button data-tab="zoom" class="tab">Zoom</button>
+        <button data-tab="reframe" class="tab">Reframe</button>
+        <span id="edit-title"></span>
+        <span class="grow"></span>
+        <span id="tinfo"></span>
+        <button id="edit-done" class="pill">Done</button>
+      </div>
+      <div id="pane-trim" class="pane">
+        <div id="tbar"><div id="tsel"></div><div id="th-in" class="th"></div><div id="th-out" class="th"></div></div>
+      </div>
+      <div id="pane-zoom" class="pane" hidden>
+        <input id="zoom" type="range" min="1" max="4" step="0.05" value="1">
+        <span id="zoomv">1.0x</span>
+        <button id="zreset" class="pill">Reset</button>
+      </div>
+      <div id="pane-reframe" class="pane" hidden>
+        <span id="rhint">Drag the picture to move it.</span>
+        <button id="rreset" class="pill">Centre</button>
+      </div>
+    </div>
+
+    <div id="timerow">
+      <button id="playbtn" aria-label="Play / Pause"></button>
+      <span id="time">0:00 / 0:00</span>
+    </div>
+
+    <div id="tl">
+      <div id="tl-clips"></div>
+      <div id="playhead"></div>
+    </div>
+  </div>
+</div>
 
 <!-- Shown while saving and when the saved video is ready -->
 <div id="overlay" hidden>
@@ -70,11 +94,13 @@
     <div id="bar"><div id="bar-fill"></div></div>
     <div class="row-btns">
       <button id="ov-save" hidden>Save to device</button>
-      <button id="ov-close" class="quiet">Cancel</button>
+      <button id="ov-close" class="pill">Cancel</button>
     </div>
   </div>
 </div>
 
+<!-- Two hidden players: one plays while the next waits ready -->
+<div id="pool"><video id="pA" playsinline></video><video id="pB" playsinline></video></div>
 <canvas id="canvas" hidden></canvas>
 <script src="app.js"></script>
 </body>
