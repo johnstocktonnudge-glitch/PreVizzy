@@ -130,3 +130,6 @@ button { font:inherit; color:var(--text); }
 /* portrait: the top bar wraps onto more rows (tighter buttons); the menu sits under it */
 #menu { top:var(--topbar-h, 52px); }
 @media (orientation:portrait) { #top { gap:6px; } #top .pill { padding:0 10px; min-height:38px; } }
+/* edit panel: tabs wrap in portrait so Done is always reachable */
+#tabs { flex-wrap:wrap; row-gap:4px; }
+@media (orientation:portrait) { .tab { padding:0 10px; } #tabs .grow { display:none; } #edit-done { margin-left:auto; } }

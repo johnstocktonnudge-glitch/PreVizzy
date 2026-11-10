@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver15';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver16';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -523,7 +523,7 @@ function swapClips(x, y) {
 tl.addEventListener('pointerdown', e => {
   if (!clips.length || recording || exporting) return;
   tl.setPointerCapture(e.pointerId);
-  tp = { x: e.clientX, moved: false, mv: false, ax: e.clientX, idx: -1 };
+  tp = { x: e.clientX, moved: false, mv: false, ax: e.clientX, idx: -1, t0: performance.now(), lastX: e.clientX };
   const mine = tp;
   mine.timer = setTimeout(() => {                       // press and hold: this clip can now be moved
     if (tp !== mine || mine.moved) return;
@@ -557,13 +557,15 @@ tl.addEventListener('pointermove', e => {
     }
     return;
   }
-  if (!tp.moved && Math.abs(e.clientX - tp.x) > 8) { tp.moved = true; clearTimeout(tp.timer); stopPlay(); }
+  if (!tp.moved && Math.abs(e.clientX - tp.x) > 16) { tp.moved = true; clearTimeout(tp.timer); stopPlay(); }
   if (tp.moved) goTo(xToT(e.clientX), true);
 });
 const tlEnd = e => {
   if (!tp) return;
   clearTimeout(tp.timer); clearTimeout(tp.unlock);
-  const wasTap = !tp.moved && !tp.mv;
+  // a quick touch that wandered a little is still a tap (fingers are not perfectly still)
+  const quick = performance.now() - tp.t0 < 400 && Math.abs(e.clientX - tp.x) < 24;
+  const wasTap = (!tp.moved || quick) && !tp.mv;
   const wasMove = tp.mv, wasScrub = tp.moved;
   tp = null;
   if (wasScrub && fastScrub) { fastScrub = false; refreshStill(); }       // finger lifted: show the exact frame
