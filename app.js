@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver21';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver22';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -376,17 +376,22 @@ function paintNudge(c) {
   }
 }
 
+// the clip whose picture is on screen (found by its number, so swapping clips cannot mix them up)
+function shownClip() { return shown ? (clips.find(k => k.id === shown.id) || null) : null; }
+function shownIsSelected() { return !!shown && selected >= 0 && !!clips[selected] && shown.id === clips[selected].id; }
 function redraw() {
   dbg('redraw shown.i=' + (shown ? shown.i : 'none') + ' z=' + (shown && clips[shown.i] ? clips[shown.i].zoom.toFixed(2) : '-'));
-  if (shown && clips[shown.i]) drawView(shown.src, clips[shown.i]);
+  const sc = shownClip();
+  if (sc) drawView(shown.src, sc);
 }
 
 /* ---------- show one frame (used when scrubbing and editing) ---------- */
 function setShown(sh) {
+  if (sh && clips[sh.i]) sh.id = clips[sh.i].id;
   if (shown && shown.own && shown.src && shown.src.close) { try { shown.src.close(); } catch (_) {} }
   shown = sh;
 }
-function useStillBox() { return selected >= 0 && mode === 'review' && !playing && (tab === 'zoom' || tab === 'reframe') && !!shown && shown.src === stillCv && shown.i === selected; }
+function useStillBox() { return selected >= 0 && mode === 'review' && !playing && (tab === 'zoom' || tab === 'reframe') && !!shown && shown.src === stillCv && shownIsSelected(); }
 function syncStill() {
   const box = $('stillbox'), on = useStillBox();
   if (!on) { if (!box.hidden) { box.hidden = true; view.style.visibility = ''; redraw(); } return; }
@@ -548,6 +553,7 @@ function swapClips(x, y) {
   [clips[x], clips[y]] = [clips[y], clips[x]];
   if (selected === x) selected = y; else if (selected === y) selected = x;
   movingIdx = y;
+  setShown(null);
   head = startsOf()[y];
   renderTimeline();
   updatePlayhead();
@@ -731,7 +737,7 @@ function editT() { const loc = locate(head); const c = clips[selected]; return l
 // make sure the clip being edited has its picture on screen (zoom and reframe need it)
 function ensureEditStill() {
   if (selected < 0 || (tab !== 'zoom' && tab !== 'reframe')) return;
-  if (shown && shown.i === selected && shown.src === stillCv) return;
+  if (shown && shown.src === stillCv && shownIsSelected()) return;
   showReview();
   queueShow(selected, editT(), true);
 }
@@ -741,7 +747,7 @@ function showClipFrameForEdit() {
   fastScrub = false;
   stopPlay();
   showReview();
-  if (shown && shown.i === selected) { redraw(); syncStill(); return; }
+  if (shownIsSelected()) { redraw(); syncStill(); return; }
   queueShow(selected, editT(), true);
 }
 

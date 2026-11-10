@@ -138,3 +138,4 @@ button { font:inherit; color:var(--text); }
 /* zoom / reframe preview: the still picture is scaled by the phone's own graphics (a plain CSS transform) */
 #stillbox { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); overflow:hidden; background:#000; }
 #stillbox canvas { display:block; width:100%; height:100%; will-change:transform; }
+#app.mono #stillbox canvas { filter:grayscale(1); }
