@@ -349,6 +349,7 @@ function getAC() {
    o = { startIdx, startT, ctx, W, H, out (audio node), stopped(), progress(i, tInClip), onClip(i) }
    Needs: clips, startsOf, lenOf, drawFrame (from app.js) */
 async function runTimelineWC(o) {
+  const T_start = performance.now();
   const ac = getAC();
   const starts = startsOf(), ovs = ovArr(), n = clips.length, total = totalLen();
   const T0 = starts[o.startIdx] + (o.startT - clips[o.startIdx].inT);
@@ -371,9 +372,11 @@ async function runTimelineWC(o) {
   const tw = performance.now();
   const waiting = () => first.some(k => !streams[k].hasFrame() && !streams[k].failed);
   while (waiting() && performance.now() - tw < 3000 && !o.stopped()) await sleep(15);
+  dbg('play: first frames ready after ' + Math.round(performance.now() - T_start) + ' ms (' + first.length + ' decoder' + (first.length > 1 ? 's' : '') + ')');
   if (o.stopped() || streams[i].failed) { closeAll(); return; }
 
   if (ac.state !== 'running') { try { await Promise.race([ac.resume(), sleep(600)]); } catch (_) {} }
+  dbg('play: audio ' + ac.state + ' after ' + Math.round(performance.now() - T_start) + ' ms');
   const useAC = ac.state === 'running';
   const perf0 = performance.now();
   const A0 = (useAC ? ac.currentTime : 0) + 0.12;          // the moment timeline time T0 begins
@@ -406,7 +409,7 @@ async function runTimelineWC(o) {
   }
 
   return new Promise(resolve => {
-    let ended = false;
+    let ended = false, firstDraw = false;
     const finish = () => {
       if (ended) return; ended = true;
       sources.forEach(s => { try { s.stop(); } catch (_) {} });
@@ -438,6 +441,7 @@ async function runTimelineWC(o) {
         o.draw(fb, c, al, true);
       } else if (fb) o.draw(fb, c, 1, false);
       else if (fa) o.draw(fa, clips[i - 1], 1, false);
+      if (!firstDraw && (fa || fb)) { firstDraw = true; dbg('play: first picture drawn at ' + Math.round(performance.now() - T_start) + ' ms'); }
       o.progress(i, Math.max(0, T - starts[i]));
       if (T >= total - 0.001) return finish();
       requestAnimationFrame(tick);
@@ -472,7 +476,7 @@ async function buildThumbs(c) {
     if (d.video.description) cfg.description = d.video.description;
     dec.configure(cfg);
     for (let j = 0; j < S.length && !bad && !c.dead; j++) {
-      while (dec.decodeQueueSize > 8 && !bad) await sleep(4);
+      while ((dec.decodeQueueSize > 8 || playing || recording || exporting) && !bad && !c.dead) await sleep(playing ? 200 : 4);
       const s = S[j];
       dec.decode(new EncodedVideoChunk({ type: s.key ? 'key' : 'delta', timestamp: Math.round(s.t * 1e6), duration: Math.round(s.dur * 1e6), data: d.u8.subarray(s.off, s.off + s.size) }));
     }

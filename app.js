@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver18';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver19';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -810,6 +810,7 @@ function stopPlay() {
 
 async function togglePlay() {
   if (playing) { stopPlay(); return; }
+  dbg('play pressed');
   if (!clips.length || recording || exporting) return;
   if (WC_OK) getAC();                                   // sound is allowed because this runs inside the tap
   if (clips.some(c => !c.ready)) await Promise.all(clips.map(c => c.prep));
