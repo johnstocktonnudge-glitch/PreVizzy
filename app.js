@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver23';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver24';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -714,7 +714,9 @@ function moveTrim(e) {
   else { const lim = c.inT + need; if (t < lim && need > minLen(c)) say('Clip not long enough', 1500); c.outT = Math.min(c.dur, Math.max(t, lim)); }
   stopPlay();
   showReview();
-  queueShow(selected, tdrag === 'in' ? c.inT : Math.max(c.inT, c.outT - 0.05));
+  const st = tdrag === 'in' ? c.inT : Math.max(c.inT, c.outT - 0.05);
+  if (c.thumbs && c.thumbs.length) { fastScrub = true; drawView(thumbAt(c, st).b, c); }   // instant picture while dragging
+  else queueShow(selected, st);
   head = startsOf()[selected] + (tdrag === 'in' ? 0 : Math.max(0, lenOf(c) - 0.05));
   renderTrimBar();
   renderTimeline();
@@ -729,8 +731,9 @@ tbar.addEventListener('pointerdown', e => {
   moveTrim(e);
 });
 tbar.addEventListener('pointermove', e => { if (tdrag) moveTrim(e); });
-tbar.addEventListener('pointerup', () => { tdrag = null; });
-tbar.addEventListener('pointercancel', () => { tdrag = null; });
+const tEnd = () => { if (!tdrag) return; tdrag = null; fastScrub = false; refreshStill(); };   // let go: draw the exact frame
+tbar.addEventListener('pointerup', tEnd);
+tbar.addEventListener('pointercancel', tEnd);
 
 // Zoom: slider
 $('zoom').oninput = () => {
