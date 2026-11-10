@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver22';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver23';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -167,6 +167,12 @@ async function findLenses() {
 }
 function updateZoomUI() {
   const z = $('zchip');
+  if (mode === 'review') {
+    const c = curClip();
+    z.hidden = !(c && (c.zoom || 1) > 1.01) || playing || recording;
+    z.textContent = (c ? c.zoom || 1 : 1).toFixed(1) + '\u00d7';
+    return;
+  }
   z.hidden = mode !== 'live' || !stream || !zcap;
   z.textContent = zoomNow.toFixed(1) + '\u00d7';
 }
@@ -183,7 +189,11 @@ function setZoom(v) {
     if (zPending !== null) requestAnimationFrame(go); else zBusy = false;
   });
 }
-$('zchip').onclick = e => { e.stopPropagation(); setZoom(zcap ? zcap.min : 1); };
+$('zchip').onclick = e => {
+  e.stopPropagation();
+  if (mode === 'review') { const c = curClip(); if (c) { c.zoom = 1; c.px = 0; c.py = 0; if (!previewNow()) refreshStill(); refreshStill(); updateZoomUI(); } return; }
+  setZoom(zcap ? zcap.min : 1);
+};
 $('lens').onclick = () => {
   if (backCams.length < 2) return;
   const i = backCams.indexOf(lensId);
@@ -216,7 +226,9 @@ function showLive() {
   renderAll();
 }
 
+let hintShown = false;
 function showReview() {
+  if (!hintShown && clips.length) { hintShown = true; say('Pinch the picture to zoom, drag it to reframe', 3500); }
   mode = 'review';
   live.hidden = true;
   view.hidden = false;
@@ -751,32 +763,71 @@ function showClipFrameForEdit() {
   queueShow(selected, editT(), true);
 }
 
-// Reframe: drag the picture (works once zoomed in)
-let pan = null;
+/* ---------- zoom + reframe straight on the picture ----------
+   Pinch the picture to zoom the clip under the playhead; drag it to reframe. It stays that way.
+   While your fingers are down the picture comes from the small scrub pictures (instant);
+   when you let go the full quality frame is drawn. */
+const ep = new Map(); let eg = null;                      // fingers on the picture, and the gesture they make
+function curClip() { if (!clips.length) return null; const l = locate(head); return l ? clips[l.i] : null; }
+function previewNow() {                                   // draw the clip under the playhead with its zoom, right now
+  const l = locate(head); if (!l) return false;
+  const c = clips[l.i];
+  let src = null;
+  if (c.thumbs && c.thumbs.length) src = thumbAt(c, l.t).b;
+  else if (shown && shown.id === c.id) src = shown.src;
+  if (!src) return false;
+  drawView(src, c);
+  return true;
+}
 stage.addEventListener('pointerdown', e => {
-  if (selected < 0 || tab === 'trim' || mode !== 'review' || !shown) return;
-  const c = clips[selected];
-  if (!c || c.zoom <= 1) return;
-  pan = { x: e.clientX, y: e.clientY, px: c.px, py: c.py };
-  stage.setPointerCapture(e.pointerId);
+  if (mode !== 'review' || playing || recording || exporting || !clips.length || e.target.closest('button')) return;
+  const c = curClip(); if (!c) return;
+  ep.set(e.pointerId, [e.clientX, e.clientY]);
+  try { stage.setPointerCapture(e.pointerId); } catch (_) {}
+  if (ep.size === 2) {
+    const [p, q] = [...ep.values()];
+    eg = { type: 'pinch', c, d0: Math.max(10, Math.hypot(p[0] - q[0], p[1] - q[1])), z0: c.zoom || 1 };
+    fastScrub = true;
+  } else if (ep.size === 1 && (c.zoom || 1) > 1) {
+    eg = { type: 'pan', c, x: e.clientX, y: e.clientY, px: c.px || 0, py: c.py || 0 };
+    fastScrub = true;
+  }
 });
 stage.addEventListener('pointermove', e => {
-  if (!pan) return;
-  const c = clips[selected];
-  const [vw, vh] = srcSize(shown.src);
-  if (!vw || !vh) return;
-  const sw = vw / c.zoom, sh = vh / c.zoom;
-  const cw = stage.clientWidth, ch = stage.clientHeight;
-  const dispW = Math.min(cw, ch * vw / vh), dispH = dispW * vh / vw;
-  const dx = e.clientX - pan.x, dy = e.clientY - pan.y;
-  // finger right = picture right = crop window moves left
-  c.px = Math.max(-1, Math.min(1, pan.px - (dx * sw / dispW) / ((vw - sw) / 2)));
-  c.py = Math.max(-1, Math.min(1, pan.py - (dy * sh / dispH) / ((vh - sh) / 2)));
-  redraw(); syncStill();
+  if (!ep.has(e.pointerId)) return;
+  ep.set(e.pointerId, [e.clientX, e.clientY]);
+  if (!eg) return;
+  const c = eg.c;
+  if (eg.type === 'pinch' && ep.size >= 2) {
+    const [p, q] = [...ep.values()];
+    let z = eg.z0 * Math.hypot(p[0] - q[0], p[1] - q[1]) / eg.d0;
+    z = Math.max(1, Math.min(MAX_ZOOM, z));
+    if (z < 1.05) { z = 1; c.px = 0; c.py = 0; }
+    c.zoom = z;
+  } else if (eg.type === 'pan' && ep.size === 1) {
+    const vw = c.w || 1920, vh = c.h || 1080, z = c.zoom || 1;
+    const sw = vw / z, sh = vh / z;
+    const cw = stage.clientWidth, ch = stage.clientHeight;
+    const dispW = Math.min(cw, ch * vw / vh);
+    const dx = e.clientX - eg.x, dy = e.clientY - eg.y;
+    c.px = Math.max(-1, Math.min(1, eg.px - (dx * sw / dispW) / ((vw - sw) / 2)));    // finger right = picture right
+    c.py = Math.max(-1, Math.min(1, eg.py - (dy * sh / dispW) / ((vh - sh) / 2)));
+  } else return;
+  previewNow();
+  updateZoomUI();
 });
-const panEnd = () => { pan = null; };
-stage.addEventListener('pointerup', panEnd);
-stage.addEventListener('pointercancel', panEnd);
+const eEnd = e => {
+  if (!ep.has(e.pointerId)) return;
+  ep.delete(e.pointerId);
+  if (ep.size < 2 && eg && eg.type === 'pinch') eg = null;
+  if (ep.size === 0) {
+    const had = !!eg || fastScrub;
+    eg = null;
+    if (had) { fastScrub = false; refreshStill(); updateZoomUI(); }
+  }
+};
+stage.addEventListener('pointerup', eEnd);
+stage.addEventListener('pointercancel', eEnd);
 
 /* ---------- the sequencer: plays clips back to back with clean cuts ----------
    Two players are used. While one plays, the next is already loaded and sitting on
