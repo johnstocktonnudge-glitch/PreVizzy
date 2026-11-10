@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver6';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver7';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -43,18 +43,37 @@ const clock = s => { s = Math.max(0, s); return Math.floor(s / 60) + ':' + Strin
 const once = (el, ev) => new Promise(r => el.addEventListener(ev, r, { once: true }));
 const lenOf = c => c.outT - c.inT;
 const minLen = c => Math.min(MIN_CLIP, c.dur / 2);
-const totalLen = () => clips.reduce((a, c) => a + lenOf(c), 0);
-const startsOf = () => { let a = 0; return clips.map(c => { const s = a; a += lenOf(c); return s; }); };
+const JOINS = { b: 8 / 30, f2: 2, f4: 4 };     // blend (8 frames) / 2 second fade / 4 second fade
+const joinOf = c => (c && c.join) || 'b';
+const wcPossible = () => WC_OK && clips.every(c => !c.ready || c.demux);
+// how much clip i overlaps clip i+1 (seconds). Kept inside what the clips can give.
+function ovArr() {
+  const n = clips.length, out = new Array(n).fill(0);
+  if (!wcPossible()) return out;
+  let prev = 0;
+  for (let i = 0; i < n - 1; i++) {
+    const d = JOINS[joinOf(clips[i])];
+    const reserve = i + 1 < n - 1 ? Math.min(JOINS[joinOf(clips[i + 1])], 0.4 * lenOf(clips[i + 1])) : 0;
+    let o = Math.min(d, lenOf(clips[i]) - prev - 0.02, lenOf(clips[i + 1]) - reserve - 0.02);
+    if (d < 1) o = Math.min(o, 0.45 * Math.min(lenOf(clips[i]), lenOf(clips[i + 1])));
+    out[i] = Math.max(0, o);
+    prev = out[i];
+  }
+  return out;
+}
+const startsOf = () => { const ov = ovArr(); let a = 0; return clips.map((c, i) => { const s = a; a += lenOf(c) - ov[i]; return s; }); };
+const totalLen = () => { if (!clips.length) return 0; const s = startsOf(); return s[s.length - 1] + lenOf(clips[clips.length - 1]); };
+// width a clip takes on the timeline strip
+const effLens = () => { const s = startsOf(); return clips.map((c, i) => i < clips.length - 1 ? s[i + 1] - s[i] : lenOf(c)); };
 
 // which clip, and where inside it, is timeline time T
 function locate(T) {
-  let acc = 0;
-  for (let i = 0; i < clips.length; i++) {
-    const l = lenOf(clips[i]);
-    if (T < acc + l || i === clips.length - 1) return { i, t: clips[i].inT + Math.max(0, Math.min(T - acc, l)) };
-    acc += l;
-  }
-  return null;
+  if (!clips.length) return null;
+  const s = startsOf();
+  let k = 0;
+  for (let j = 0; j < clips.length; j++) if (s[j] <= T + 1e-9) k = j;
+  const c = clips[k];
+  return { i: k, t: c.inT + Math.max(0, Math.min(T - s[k], lenOf(c))) };
 }
 
 function pickMime() {
@@ -288,7 +307,7 @@ function srcSize(s) {
   return s.videoWidth ? [s.videoWidth, s.videoHeight] : [s.displayWidth || s.codedWidth || 0, s.displayHeight || s.codedHeight || 0];
 }
 
-function drawFrame(ctx, W, H, v, c) {
+function drawFrame(ctx, W, H, v, c, alpha, over) {
   const [vw, vh] = srcSize(v);
   if (!vw || !vh) return;
   const z = c.zoom || 1;
@@ -297,9 +316,10 @@ function drawFrame(ctx, W, H, v, c) {
   const sy = (vh - sh) * (0.5 + 0.5 * (c.py || 0));
   const s = Math.min(W / sw, H / sh);
   const dw = sw * s, dh = sh * s;
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, W, H);
+  if (!over) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); }
+  ctx.globalAlpha = alpha === undefined ? 1 : alpha;
   ctx.drawImage(v, sx, sy, sw, sh, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  ctx.globalAlpha = 1;
 }
 
 function sizeFor(side) {
@@ -308,10 +328,10 @@ function sizeFor(side) {
   return [Math.round(w * k / 2) * 2, Math.round(h * k / 2) * 2];
 }
 
-function drawView(v, c) {
+function drawView(v, c, alpha, over) {
   const [W, H] = sizeFor(PREVIEW_SIDE);
   if (view.width !== W || view.height !== H) { view.width = W; view.height = H; }
-  drawFrame(vctx, W, H, v, c);
+  drawFrame(vctx, W, H, v, c, alpha, over);
 }
 
 function redraw() {
@@ -377,16 +397,19 @@ function renderTimeline() {
     return;
   }
   const playIdx = -1;
+  const eff = effLens();
   clips.forEach((c, i) => {
     const b = document.createElement('div');
-    b.className = 'clip' + (i === selected ? ' sel' : '') + (i === playIdx ? ' now' : '');
-    b.style.flexGrow = lenOf(c);
-    b.innerHTML = '<b>' + (i + 1) + '</b>' + fmt(lenOf(c));
+    b.className = 'clip' + (i === selected ? ' sel' : '') + (i === playIdx ? ' now' : '') + (i === movingIdx ? ' moving' : '');
+    b.style.flexGrow = Math.max(0.05, eff[i]);
+    const jn = i < clips.length - 1 && joinOf(c) !== 'b' ? '<span class="jn">' + (joinOf(c) === 'f2' ? '2s' : '4s') + '</span>' : '';
+    b.innerHTML = '<b>' + (i + 1) + '</b>' + fmt(lenOf(c)) + jn;
     tlClips.appendChild(b);
   });
   cacheRects();
 }
 
+let movingIdx = -1;
 let rects = [];            // where each clip block sits (measured once, not every frame)
 function cacheRects() {
   const tr = tl.getBoundingClientRect();
@@ -403,7 +426,8 @@ function updatePlayhead() {
   if (!rects.length || rects.length !== clips.length) { playhead.style.display = 'none'; return; }
   playhead.style.display = '';
   const loc = locate(head), starts = startsOf(), r = rects[loc.i];
-  const frac = lenOf(clips[loc.i]) > 0 ? Math.min(1, (head - starts[loc.i]) / lenOf(clips[loc.i])) : 0;
+  const el = effLens()[loc.i];
+  const frac = el > 0 ? Math.max(0, Math.min(1, (head - starts[loc.i]) / el)) : 0;
   playhead.style.transform = 'translateX(' + (r.left + frac * r.width) + 'px)';
 }
 
@@ -418,24 +442,58 @@ function hit(x) {
   });
   return best;
 }
-const xToT = x => { const h = hit(x); if (!h) return 0; return startsOf()[h.i] + h.frac * lenOf(clips[h.i]); };
+const xToT = x => { const h = hit(x); if (!h) return 0; return startsOf()[h.i] + h.frac * effLens()[h.i]; };
 
 // finger on the timeline: drag = scrub, tap = open that clip for editing
 let tp = null;
+function swapClips(x, y) {
+  [clips[x], clips[y]] = [clips[y], clips[x]];
+  if (selected === x) selected = y; else if (selected === y) selected = x;
+  movingIdx = y;
+  head = startsOf()[y];
+  renderTimeline();
+  updatePlayhead();
+  renderEdit();
+  showReview();
+  refreshStill();
+}
 tl.addEventListener('pointerdown', e => {
   if (!clips.length || recording || exporting) return;
   tl.setPointerCapture(e.pointerId);
-  tp = { x: e.clientX, moved: false };
+  tp = { x: e.clientX, moved: false, mv: false, ax: e.clientX, idx: -1 };
+  const mine = tp;
+  mine.timer = setTimeout(() => {                       // press and hold: this clip can now be moved
+    if (tp !== mine || mine.moved) return;
+    const h = hit(mine.x);
+    if (!h) return;
+    stopPlay();
+    mine.mv = true; mine.idx = h.i; movingIdx = h.i;
+    if (navigator.vibrate) navigator.vibrate(30);
+    renderTimeline();
+    say('Swipe the clip left or right to move it', 1800);
+  }, 450);
 });
 tl.addEventListener('pointermove', e => {
   if (!tp) return;
-  if (!tp.moved && Math.abs(e.clientX - tp.x) > 8) { tp.moved = true; stopPlay(); }
+  if (tp.mv) {
+    const dx = e.clientX - tp.ax;
+    if (Math.abs(dx) > 45) {
+      const j = tp.idx + (dx > 0 ? 1 : -1);
+      if (j >= 0 && j < clips.length) { swapClips(tp.idx, j); tp.idx = j; }
+      tp.ax = e.clientX;
+    }
+    return;
+  }
+  if (!tp.moved && Math.abs(e.clientX - tp.x) > 8) { tp.moved = true; clearTimeout(tp.timer); stopPlay(); }
   if (tp.moved) goTo(xToT(e.clientX));
 });
 const tlEnd = e => {
   if (!tp) return;
-  const wasTap = !tp.moved;
+  clearTimeout(tp.timer);
+  const wasTap = !tp.moved && !tp.mv;
+  const wasMove = tp.mv;
   tp = null;
+  if (wasMove) { movingIdx = -1; renderTimeline(); return; }
   if (wasTap && e.type === 'pointerup') {
     const h = hit(e.clientX);
     if (h) { stopPlay(); goTo(xToT(e.clientX)); openEdit(h.i); }
@@ -462,7 +520,7 @@ function closeEdit() {
 function setTab(name) {
   tab = name;
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
-  ['trim', 'zoom', 'reframe'].forEach(n => { $('pane-' + n).hidden = n !== name; });
+  ['trim', 'zoom', 'reframe', 'join'].forEach(n => { $('pane-' + n).hidden = n !== name; });
   $('tinfo').hidden = name !== 'trim';
   renderEdit();
 }
@@ -476,6 +534,9 @@ function renderEdit() {
   renderTrimBar();
   $('zoom').value = c.zoom;
   $('zoomv').textContent = c.zoom.toFixed(1) + 'x';
+  const last = selected >= clips.length - 1;
+  document.querySelectorAll('.jbtn').forEach(b => { b.classList.toggle('on', !last && joinOf(c) === b.dataset.join); b.disabled = last; });
+  $('jhint').textContent = last ? 'Last clip: nothing after it.' : 'Clip ' + (selected + 1) + ' into ' + (selected + 2) + ':';
   $('rhint').textContent = c.zoom > 1 ? 'Drag the picture to move it.' : 'Zoom in first (Zoom tab), then drag the picture.';
 }
 
@@ -489,6 +550,25 @@ function renderTrimBar() {
   $('tinfo').textContent = fmt(c.inT) + ' - ' + fmt(c.outT) + ' (' + fmt(lenOf(c)) + ')';
 }
 
+// how much length clip i needs for the fades on its two sides (0 when it only has plain blends)
+function fadeNeed(i, trial) {
+  const n = clips.length, j = k => (trial && trial.k === k) ? trial.kind : joinOf(clips[k]);
+  const L = i > 0 ? j(i - 1) : null, R = i < n - 1 ? j(i) : null;
+  if ((!L || L === 'b') && (!R || R === 'b')) return 0;
+  return (L ? JOINS[L] : 0) + (R ? JOINS[R] : 0);
+}
+document.querySelectorAll('.jbtn').forEach(b => {
+  b.onclick = () => {
+    const i = selected, kind = b.dataset.join;
+    if (i < 0 || i >= clips.length - 1) return;
+    const t = { k: i, kind };
+    if (fadeNeed(i, t) > lenOf(clips[i]) + 1e-6 || fadeNeed(i + 1, t) > lenOf(clips[i + 1]) + 1e-6) { say('Clip not long enough', 2200); return; }
+    clips[i].join = kind;
+    stopPlay();
+    renderEdit(); renderTimeline(); updatePlayhead(); refreshStill();
+  };
+});
+
 // Trim: drag a yellow handle (nearest one moves)
 let tdrag = null;
 const tbar = $('tbar');
@@ -496,8 +576,9 @@ function moveTrim(e) {
   const c = clips[selected]; if (!c) return;
   const r = tbar.getBoundingClientRect();
   const t = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * c.dur;
-  if (tdrag === 'in') c.inT = Math.max(0, Math.min(t, c.outT - minLen(c)));
-  else c.outT = Math.min(c.dur, Math.max(t, c.inT + minLen(c)));
+  const need = Math.max(minLen(c), fadeNeed(selected));
+  if (tdrag === 'in') { const lim = c.outT - need; if (t > lim && need > minLen(c)) say('Clip not long enough', 1500); c.inT = Math.max(0, Math.min(t, lim)); }
+  else { const lim = c.inT + need; if (t < lim && need > minLen(c)) say('Clip not long enough', 1500); c.outT = Math.min(c.dur, Math.max(t, lim)); }
   stopPlay();
   showReview();
   queueShow(selected, tdrag === 'in' ? c.inT : Math.max(c.inT, c.outT - 0.05));
@@ -646,7 +727,7 @@ async function togglePlay() {
     await runTimelineWC({
       startIdx: loc.i, startT: loc.t, out: getAC().destination,
       stopped: () => token !== playToken,
-      draw: (fr, c) => drawView(fr, c),
+      draw: (fr, c, al, over) => drawView(fr, c, al, over),
       progress: (i, t) => { head = starts[i] + t; updatePlayhead(); },
       onClip: i => markNow(i)
     });
@@ -735,7 +816,7 @@ async function saveVideo() {
       await runTimelineWC({
         startIdx: 0, startT: clips[0].inT, out: dest,
         stopped: () => exportCancel,
-        draw: (fr, c) => drawFrame(ctx, W, H, fr, c),
+        draw: (fr, c, al, over) => drawFrame(ctx, W, H, fr, c, al, over),
         progress
       });
     } else {
@@ -809,8 +890,8 @@ $('ov-save').onclick = async () => {
 
 /* ---------- clear ---------- */
 function clearAll() {
-  if (!clips.length) return;
-  if (!confirm('Clear all ' + clips.length + ' clips?')) return;
+  if (!clips.length) { say('Nothing to clear.', 2000); $('menu').hidden = true; return; }
+  if (!confirm('Delete all ' + clips.length + ' clips from the app and free their space?')) return;
   stopPlay();
   closeEdit();
   clips.forEach(c => URL.revokeObjectURL(c.url));
@@ -862,6 +943,10 @@ $('center-play').innerHTML = ICON_PLAY;
 $('center-play').onclick = e => { e.stopPropagation(); togglePlay(); };
 saveBtn.onclick = saveVideo;
 clearBtn.onclick = clearAll;
+const monoBtn = $('mono');
+function applyMono(on) { app.classList.toggle('mono', on); monoBtn.classList.toggle('on', on); }
+applyMono(lsGet('pv_mono') === '1');
+monoBtn.onclick = () => { const on = !app.classList.contains('mono'); lsSet('pv_mono', on ? '1' : '0'); applyMono(on); };
 $('golive').onclick = () => { closeEdit(); showLive(); };
 $('more').onclick = () => { $('menu').hidden = !$('menu').hidden; };
 stage.addEventListener('click', e => {

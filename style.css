@@ -104,3 +104,12 @@ button { font:inherit; color:var(--text); }
 #zchip { position:absolute; left:12px; top:50%; transform:translateY(-50%); background:var(--glass); border:1px solid var(--line); border-radius:20px; padding:0 12px; min-height:40px; font-size:15px; font-weight:600; z-index:5; }
 #app.reviewing #zchip { display:none; }
 #stage { touch-action:none; }
+
+/* black and white viewing (picture only; saved videos stay in colour) */
+#app.mono #live, #app.mono #view { filter:grayscale(1); }
+#mono.on { background:#fff; color:#000; border-color:#fff; }
+/* join marker on the timeline + moving a clip */
+.clip { position:relative; }
+.clip .jn { position:absolute; right:3px; top:2px; font-size:11px; color:var(--accent); font-weight:700; }
+.clip.moving { outline:2px solid #fff; transform:translateY(-3px); }
+.jbtn.on { background:var(--accent); border-color:var(--accent); color:#000; font-weight:600; }

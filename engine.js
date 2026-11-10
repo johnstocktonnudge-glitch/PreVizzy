@@ -350,22 +350,28 @@ function getAC() {
    Needs: clips, startsOf, lenOf, drawFrame (from app.js) */
 async function runTimelineWC(o) {
   const ac = getAC();
-  const starts = startsOf(), n = clips.length, total = totalLen();
+  const starts = startsOf(), ovs = ovArr(), n = clips.length, total = totalLen();
   const T0 = starts[o.startIdx] + (o.startT - clips[o.startIdx].inT);
+  const endOf = k => starts[k] + lenOf(clips[k]);
+  const idxAt = T => { let k = 0; for (let j = 0; j < n; j++) if (starts[j] <= T + 1e-9) k = j; return k; };
+  const ct = (k, T) => clips[k].inT + Math.max(0, T - starts[k]);       // clip time at timeline time T
   const streams = [];
-  const open = (i, limit, t) => {
-    if (!streams[i]) streams[i] = new ClipStream(clips[i], t === undefined ? clips[i].inT : t, limit);
-    return streams[i];
+  const open = (k, limit, t) => {
+    if (!streams[k]) streams[k] = new ClipStream(clips[k], t === undefined ? clips[k].inT : t, limit);
+    return streams[k];
   };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const closeAll = () => streams.forEach(s => s && s.close());
 
   closeScrubDecoder();                           // phones only allow a few decoders at once
-  let i = o.startIdx;
-  const s0 = open(i, 10, o.startT);
+  let i = idxAt(T0);
+  const first = [i];
+  if (i > 0 && T0 < endOf(i - 1) - 1e-6) first.push(i - 1);     // starting inside a blend: the clip before is still showing
+  first.forEach(k => open(k, 10, ct(k, T0)));
   const tw = performance.now();
-  while (!s0.hasFrame() && !s0.failed && performance.now() - tw < 3000 && !o.stopped()) await sleep(15);
-  if (o.stopped() || s0.failed) { closeAll(); return; }
+  const waiting = () => first.some(k => !streams[k].hasFrame() && !streams[k].failed);
+  while (waiting() && performance.now() - tw < 3000 && !o.stopped()) await sleep(15);
+  if (o.stopped() || streams[i].failed) { closeAll(); return; }
 
   if (ac.state !== 'running') { try { await Promise.race([ac.resume(), sleep(600)]); } catch (_) {} }
   const useAC = ac.state === 'running';
@@ -374,20 +380,28 @@ async function runTimelineWC(o) {
   const nowT = () => useAC ? ac.currentTime - (ac.outputLatency || 0) : (performance.now() - perf0) / 1000;
   const aStart = useAC ? A0 : 0.12;
 
-  // sound: every clip's audio is scheduled up front on the audio clock, so joins are sample-accurate
-  const sources = [];
+  // sound: every clip's audio is scheduled up front on the audio clock; blends cross-fade the volume
+  const sources = [], gains = [];
   if (useAC) {
-    for (let k = o.startIdx; k < n; k++) {
+    const at = T => A0 + T - T0;
+    for (let k = 0; k < n; k++) {
       const c = clips[k];
       if (!c.abuf) continue;
-      const first = k === o.startIdx;
-      const off = first ? o.startT : c.inT;
-      const dur = first ? c.outT - o.startT : lenOf(c);
+      const s = starts[k], e = endOf(k);
+      if (e <= T0) continue;
+      const off = c.inT + Math.max(0, T0 - s);
+      const dur = Math.max(0.01, c.outT - off);
+      const g = ac.createGain();
+      g.connect(o.out);
+      const lo = k > 0 ? ovs[k - 1] : 0, hi = k < n - 1 ? ovs[k] : 0;
+      if (lo > 0) { g.gain.setValueAtTime(0, at(s)); g.gain.linearRampToValueAtTime(1, at(s + lo)); }
+      else g.gain.setValueAtTime(1, 0);
+      if (hi > 0) { g.gain.setValueAtTime(1, at(e - hi)); g.gain.linearRampToValueAtTime(0, at(e)); }
       const src = ac.createBufferSource();
       src.buffer = c.abuf;
-      src.connect(o.out);
-      src.start(Math.max(ac.currentTime, A0 + (starts[k] + (first ? o.startT - c.inT : 0) - T0)), Math.max(0, off), Math.max(0.01, dur));
-      sources.push(src);
+      src.connect(g);
+      src.start(Math.max(ac.currentTime, at(Math.max(s, T0))), off, dur);
+      sources.push(src); gains.push(g);
     }
   }
 
@@ -396,6 +410,7 @@ async function runTimelineWC(o) {
     const finish = () => {
       if (ended) return; ended = true;
       sources.forEach(s => { try { s.stop(); } catch (_) {} });
+      gains.forEach(g => { try { g.disconnect(); } catch (_) {} });
       closeAll();
       resolve();
     };
@@ -404,17 +419,25 @@ async function runTimelineWC(o) {
       let T = T0 + (nowT() - aStart);
       if (T < T0) T = T0;
       // move on to the next clip when its time comes
-      while (i + 1 < n && T >= starts[i + 1]) {
-        if (streams[i]) { streams[i].close(); streams[i] = null; }
+      const ni = idxAt(T);
+      while (i < ni) {
         i++;
         open(i, 10).limit = 10;
         if (o.onClip) o.onClip(i);
       }
-      // get the clip after this one decoding well before the cut
+      const prevOn = i > 0 && T < endOf(i - 1);                  // still inside a blend with the clip before?
+      streams.forEach((s, k) => { if (s && k < i && !(k === i - 1 && prevOn)) { s.close(); streams[k] = null; } });
+      // get the clip after this one decoding well before it is needed
       if (i + 1 < n && T >= starts[i + 1] - 2.0) open(i + 1, 6);
       const c = clips[i], s = open(i, 10);
-      const fr = s.take(c.inT + Math.max(0, T - starts[i]));
-      if (fr) o.draw(fr, c);
+      const fb = s.take(ct(i, T));
+      const fa = prevOn && streams[i - 1] ? streams[i - 1].take(ct(i - 1, T)) : null;
+      if (fa && fb) {
+        const al = Math.max(0, Math.min(1, (T - starts[i]) / Math.max(0.001, ovs[i - 1])));
+        o.draw(fa, clips[i - 1], 1, false);
+        o.draw(fb, c, al, true);
+      } else if (fb) o.draw(fb, c, 1, false);
+      else if (fa) o.draw(fa, clips[i - 1], 1, false);
       o.progress(i, Math.max(0, T - starts[i]));
       if (T >= total - 0.001) return finish();
       requestAnimationFrame(tick);
