@@ -478,7 +478,7 @@ async function buildThumbsNow(c) {
     if (d.video.description) cfg.description = d.video.description;
     dec.configure(cfg);
     for (let j = 0; j < S.length && !bad && !c.dead; j++) {
-      while ((dec.decodeQueueSize > 8 || playing || recording || exporting || selected >= 0) && !bad && !c.dead) await sleep(playing ? 200 : 4);
+      while ((dec.decodeQueueSize > 8 || playing || recording || exporting) && !bad && !c.dead) await sleep(playing ? 200 : 4);
       const s = S[j];
       dec.decode(new EncodedVideoChunk({ type: s.key ? 'key' : 'delta', timestamp: Math.round(s.t * 1e6), duration: Math.round(s.dur * 1e6), data: d.u8.subarray(s.off, s.off + s.size) }));
     }

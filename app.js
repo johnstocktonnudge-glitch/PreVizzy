@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver20';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver21';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -414,8 +414,18 @@ function snap(src) {
   } catch (e) { return false; }
 }
 let showBusy = false, showWant = null, stillWhy = '';
-function queueShow(i, t) {
-  showWant = { i, t };
+const sleepMs = ms => new Promise(r => setTimeout(r, ms));
+// a still picture from a normal video player (slower, but works on every phone)
+async function stillFromElement(c, t) {
+  const ok = await Promise.race([
+    (async () => { await loadInto(pool[0], c, t); await new Promise(r => requestAnimationFrame(r)); return true; })(),
+    sleepMs(4000).then(() => false)
+  ]);
+  return ok && snap(pool[0]);
+}
+// el = true: use the video player (for editing), not the frame decoder
+function queueShow(i, t, el) {
+  showWant = { i, t, el: !!el };
   if (showBusy) return;
   showBusy = true;
   (async () => {
@@ -424,32 +434,26 @@ function queueShow(i, t) {
         const w = showWant; showWant = null;
         const c = clips[w.i];
         if (!c) continue;
-        if (useWC()) {                                  // decoded frame (fast, exact)
-          if (fastScrub) continue;
-          let f = null;
-          try { f = await wcFrameAt(c, w.t); }
-          catch (e) {
-            closeScrubDecoder();
-            try { f = await wcFrameAt(c, w.t); } catch (e2) { console.warn('frame decoder', e2); closeScrubDecoder(); stillWhy = e2 && (e2.message || e2.name); }   // one quiet retry
-          }
-          if (f) {
-            if (snap(f)) { f.close(); setShown({ src: stillCv, i: w.i }); drawView(stillCv, c); syncStill(); }
-            else { setShown({ src: f, i: w.i, own: true }); drawView(f, c); }
-            continue;
-          }
-          // the frame decoder gave nothing: use a video player for this picture instead
-          closeScrubDecoder();
-          await loadInto(pool[0], c, w.t);
-          await new Promise(r => requestAnimationFrame(r));
-          if (snap(pool[0])) { setShown({ src: stillCv, i: w.i }); drawView(stillCv, c); syncStill(); }
-          else { setShown({ src: pool[0], i: w.i }); drawView(pool[0], c); }
-          if (stillWhy) { say('Frame decoder problem: ' + stillWhy, 4000); stillWhy = ''; }
-        } else {                                        // video-player method
-          await loadInto(pool[0], c, w.t);
-          await new Promise(r => requestAnimationFrame(r));
-          if (snap(pool[0])) { setShown({ src: stillCv, i: w.i }); drawView(stillCv, c); syncStill(); }
-          else { setShown({ src: pool[0], i: w.i }); drawView(pool[0], c); }
+        const show = () => { setShown({ src: stillCv, i: w.i }); drawView(stillCv, c); syncStill(); };
+        if (w.el || !useWC()) {
+          if (await stillFromElement(c, w.t)) { show(); continue; }
+          if (!useWC()) { say('Could not load that picture.', 3000); continue; }
         }
+        if (fastScrub) continue;
+        let f = null;                                    // decoded frame (fast, exact)
+        try { f = await wcFrameAt(c, w.t); }
+        catch (e) {
+          closeScrubDecoder();
+          try { f = await wcFrameAt(c, w.t); } catch (e2) { console.warn('frame decoder', e2); closeScrubDecoder(); stillWhy = e2 && (e2.message || e2.name); }
+        }
+        if (f) {
+          if (snap(f)) { f.close(); show(); }
+          else { setShown({ src: f, i: w.i, own: true }); drawView(f, c); }
+          continue;
+        }
+        closeScrubDecoder();                             // the decoder gave nothing: use the video player
+        if (await stillFromElement(c, w.t)) show();
+        else say('Could not load that picture.', 3000);
       }
     } catch (e) { console.warn('show frame', e); }
     finally { showBusy = false; }
@@ -613,7 +617,6 @@ window.addEventListener('resize', () => { setTopH(); syncStill(); cacheRects(); 
 
 /* ---------- editing a clip: Trim, Zoom, Reframe ---------- */
 function openEdit(i) {
-  dbg('openEdit ' + i);
   selected = i;
   fastScrub = false;
   $('edit').hidden = false;
@@ -629,6 +632,7 @@ function closeEdit() {
 
 function setTab(name) {
   tab = name;
+  ensureEditStill();
   syncStill();
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
   ['trim', 'zoom', 'reframe', 'join'].forEach(n => { $('pane-' + n).hidden = n !== name; });
@@ -723,6 +727,14 @@ $('zreset').onclick = () => { const c = clips[selected]; if (!c) return; c.zoom 
 $('rreset').onclick = () => { const c = clips[selected]; if (!c) return; c.px = 0; c.py = 0; showClipFrameForEdit(); };
 
 // make sure the edited clip's picture is on screen, then redraw it
+function editT() { const loc = locate(head); const c = clips[selected]; return loc && loc.i === selected ? loc.t : c.inT; }
+// make sure the clip being edited has its picture on screen (zoom and reframe need it)
+function ensureEditStill() {
+  if (selected < 0 || (tab !== 'zoom' && tab !== 'reframe')) return;
+  if (shown && shown.i === selected && shown.src === stillCv) return;
+  showReview();
+  queueShow(selected, editT(), true);
+}
 function showClipFrameForEdit() {
   const c = clips[selected]; if (!c) return;
   dbg('edit-redraw clip' + selected + ' zoom' + c.zoom.toFixed(2) + ' shown.i=' + (shown ? shown.i : 'none') + ' mode=' + mode);
@@ -730,8 +742,7 @@ function showClipFrameForEdit() {
   stopPlay();
   showReview();
   if (shown && shown.i === selected) { redraw(); syncStill(); return; }
-  const loc = locate(head);
-  queueShow(selected, loc && loc.i === selected ? loc.t : c.inT);
+  queueShow(selected, editT(), true);
 }
 
 // Reframe: drag the picture (works once zoomed in)
