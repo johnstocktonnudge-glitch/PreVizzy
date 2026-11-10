@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver16';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver17';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -357,10 +357,13 @@ function sizeFor(side) {
   return [Math.round(w * k / 2) * 2, Math.round(h * k / 2) * 2];
 }
 
+const MONO_CTX = 'filter' in CanvasRenderingContext2D.prototype;
 function drawView(v, c, alpha, over) {
   const [W, H] = sizeFor(PREVIEW_SIDE);
   if (view.width !== W || view.height !== H) { view.width = W; view.height = H; }
+  vctx.filter = (MONO_CTX && app.classList.contains('mono')) ? 'grayscale(1)' : 'none';   // B&W is drawn into the picture itself
   drawFrame(vctx, W, H, v, c, alpha, over);
+  vctx.filter = 'none';
 }
 
 function redraw() {
@@ -1031,7 +1034,7 @@ $('center-play').onclick = e => { e.stopPropagation(); togglePlay(); };
 saveBtn.onclick = saveVideo;
 clearBtn.onclick = clearAll;
 const monoBtn = $('mono');
-function applyMono(on) { app.classList.toggle('mono', on); monoBtn.classList.toggle('on', on); }
+function applyMono(on) { app.classList.toggle('mono', on); app.classList.toggle('mono-css', on && !MONO_CTX); monoBtn.classList.toggle('on', on); if (mode === 'review' && !playing && !view.hidden) { if (shown) redraw(); } }
 applyMono(lsGet('pv_mono') === '1');
 monoBtn.onclick = () => { const on = !app.classList.contains('mono'); lsSet('pv_mono', on ? '1' : '0'); applyMono(on); };
 $('golive').onclick = () => { closeEdit(); showLive(); };

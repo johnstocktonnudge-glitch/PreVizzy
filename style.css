@@ -106,7 +106,8 @@ button { font:inherit; color:var(--text); }
 #stage { touch-action:none; }
 
 /* black and white viewing (picture only; saved videos stay in colour) */
-#app.mono #live, #app.mono #view { filter:grayscale(1); }
+#app.mono #live { filter:grayscale(1); }
+#app.mono-css #view { filter:grayscale(1); }
 #mono.on { background:#fff; color:#000; border-color:#fff; }
 /* join marker on the timeline + moving a clip */
 .clip { position:relative; }
