@@ -48,6 +48,7 @@
     <button id="update" class="pill">Check for updates</button>
     <div id="update-msg"></div>
     <div id="engine-info"></div>
+    <button id="dbgbtn" class="pill">Show debug log</button>
     <button id="clear" class="pill">Clear cache (delete all clips)</button>
   </div>
 
@@ -111,6 +112,7 @@
 </div>
 
 <!-- Two hidden players: one plays while the next waits ready -->
+<pre id="dbg" hidden></pre>
 <div id="pool"><video id="pA" playsinline></video><video id="pB" playsinline></video></div>
 <canvas id="canvas" hidden></canvas>
 <script src="engine.js"></script>

@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver12';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver13';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -26,6 +26,13 @@ let selected = -1;         // clip being edited (-1 = none)
 let tab = 'trim';
 let mode = 'live';         // 'live' camera or 'review' of the timeline
 let shown = null;          // {v, i}: which player/clip is on screen
+const dbgLines = [];
+function dbg(s) {
+  dbgLines.push((performance.now() / 1000).toFixed(1) + ' ' + s);
+  if (dbgLines.length > 22) dbgLines.shift();
+  const d = document.getElementById('dbg');
+  if (d && !d.hidden) d.textContent = dbgLines.join('\n');
+}
 let clipSeq = 0;
 let stream = null, facing = 'environment';
 let recorder = null, chunks = [], recStart = 0, recTimer = null;
@@ -352,6 +359,7 @@ function drawView(v, c, alpha, over) {
 }
 
 function redraw() {
+  dbg('redraw shown.i=' + (shown ? shown.i : 'none') + ' z=' + (shown && clips[shown.i] ? clips[shown.i].zoom.toFixed(2) : '-'));
   if (shown && clips[shown.i]) drawView(shown.src, clips[shown.i]);
 }
 
@@ -418,7 +426,8 @@ function thumbAt(c, t) {
   while (lo < hi) { const m = (lo + hi + 1) >> 1; if (th[m].t <= t + 1e-4) lo = m; else hi = m - 1; }
   return th[lo];
 }
-function goTo(T, fast) {                  // move the playhead and show that frame
+function goTo(T, fast) {
+  dbg('goTo ' + T.toFixed(2) + (fast ? ' fast' : '') + ' sel' + selected);                  // move the playhead and show that frame
   const total = totalLen();
   head = Math.max(0, Math.min(T, total));
   const loc = locate(head);
@@ -495,6 +504,7 @@ const xToT = x => { const h = hit(x); if (!h) return 0; return startsOf()[h.i] +
 // finger on the timeline: drag = scrub, tap = open that clip for editing
 let tp = null;
 function swapClips(x, y) {
+  dbg('swap ' + x + '<->' + y);
   [clips[x], clips[y]] = [clips[y], clips[x]];
   if (selected === x) selected = y; else if (selected === y) selected = x;
   movingIdx = y;
@@ -673,6 +683,7 @@ $('rreset').onclick = () => { const c = clips[selected]; if (!c) return; c.px = 
 // make sure the edited clip's picture is on screen, then redraw it
 function showClipFrameForEdit() {
   const c = clips[selected]; if (!c) return;
+  dbg('edit-redraw clip' + selected + ' zoom' + c.zoom.toFixed(2) + ' shown.i=' + (shown ? shown.i : 'none') + ' mode=' + mode);
   fastScrub = false;
   stopPlay();
   showReview();
@@ -766,6 +777,7 @@ async function runTimeline(o) {
 
 /* ---------- play / pause ---------- */
 function stopPlay() {
+  dbg('stopPlay playing=' + playing);
   playToken++;
   const was = playing;
   if (playing) { playing = false; pool.forEach(p => p.pause()); }
@@ -1011,6 +1023,11 @@ applyMono(lsGet('pv_mono') === '1');
 monoBtn.onclick = () => { const on = !app.classList.contains('mono'); lsSet('pv_mono', on ? '1' : '0'); applyMono(on); };
 $('golive').onclick = () => { closeEdit(); showLive(); };
 $('more').onclick = () => { $('menu').hidden = !$('menu').hidden; };
+window.addEventListener('pointerdown', e => {
+  const t = e.target;
+  dbg('down ' + (t.id || t.className || t.tagName) + ' ' + Math.round(e.clientX) + ',' + Math.round(e.clientY) + ' mode=' + mode + ' head=' + head.toFixed(2) + ' tab=' + tab);
+}, true);
+$('dbgbtn').onclick = () => { const d = $('dbg'); d.hidden = !d.hidden; $('dbgbtn').textContent = d.hidden ? 'Show debug log' : 'Hide debug log'; d.textContent = dbgLines.join('\n'); $('menu').hidden = true; };
 stage.addEventListener('click', e => {
   if (e.target.closest('button')) return;
   $('menu').hidden = true;

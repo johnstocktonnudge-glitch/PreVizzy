@@ -113,3 +113,5 @@ button { font:inherit; color:var(--text); }
 .clip .jn { position:absolute; right:3px; top:2px; font-size:11px; color:var(--accent); font-weight:700; }
 .clip.moving { outline:2px solid #fff; transform:translateY(-3px); }
 .jbtn.on { background:var(--accent); border-color:var(--accent); color:#000; font-weight:600; }
+
+#dbg { position:fixed; left:4px; top:48px; z-index:50; margin:0; max-width:60vw; max-height:60vh; overflow:hidden; background:rgba(0,0,0,.75); color:#8f8; font:10px/1.25 monospace; padding:4px; pointer-events:none; white-space:pre-wrap; }
