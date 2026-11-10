@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver9';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver10';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -133,6 +133,21 @@ async function startCamera() {
     }, 2500);
   }
   renderAll();
+}
+
+/* ---------- frozen picture watchdog ---------- */
+let lastFrameAt = performance.now(), stallTries = 0;
+if (live.requestVideoFrameCallback) {
+  const onFrame = () => { lastFrameAt = performance.now(); stallTries = 0; live.requestVideoFrameCallback(onFrame); };
+  live.requestVideoFrameCallback(onFrame);
+  setInterval(() => {
+    if (mode !== 'live' || !stream || recording || exporting || document.visibilityState !== 'visible') { lastFrameAt = performance.now(); return; }
+    if (performance.now() - lastFrameAt > 2500 && stallTries < 4) {
+      stallTries++; lastFrameAt = performance.now();
+      say('Camera picture stalled - restarting it...', 2500);
+      startCamera();
+    }
+  }, 1000);
 }
 
 /* ---------- lens + zoom ---------- */
