@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver26';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver27';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -576,7 +576,7 @@ function swapClips(x, y) {
 tl.addEventListener('pointerdown', e => {
   if (!clips.length || recording || exporting) return;
   tl.setPointerCapture(e.pointerId);
-  tp = { x: e.clientX, moved: false, mv: false, ax: e.clientX, idx: -1, t0: performance.now(), lastX: e.clientX };
+  tp = { x: e.clientX, y0: e.clientY, moved: false, mv: false, ax: e.clientX, idx: -1, t0: performance.now(), lastX: e.clientX };
   const mine = tp;
   mine.timer = setTimeout(() => {                       // press and hold: this clip can now be moved
     if (tp !== mine || mine.moved) return;
@@ -586,12 +586,23 @@ tl.addEventListener('pointerdown', e => {
     mine.mv = true; mine.idx = h.i; movingIdx = h.i;
     if (navigator.vibrate) navigator.vibrate(30);
     renderTimeline();
-    say('Swipe the clip left or right to move it', 1800);
+    say('Swipe left or right to move it, up to delete it', 2200);
   }, 800);
 });
 tl.addEventListener('pointermove', e => {
   if (!tp) return;
   if (tp.mv) {
+    if (tp.gone) return;
+    const up = tp.y0 - e.clientY;
+    if (up > 28) { const bl = tlClips.children[tp.idx]; if (bl) bl.classList.add('deleting'); }
+    else { const bl = tlClips.children[tp.idx]; if (bl) bl.classList.remove('deleting'); }
+    if (up > 56 && up > Math.abs(e.clientX - tp.ax)) {   // swipe up: delete this clip
+      tp.gone = true; clearTimeout(tp.unlock);
+      if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
+      movingIdx = -1;
+      deleteClip(tp.idx);
+      return;
+    }
     if (tp.lock) {                                      // one place per swipe: wait until the finger pauses
       clearTimeout(tp.unlock);
       const me = tp;
@@ -765,6 +776,42 @@ function showClipFrameForEdit() {
   if (shownIsSelected()) { redraw(); syncStill(); return; }
   queueShow(selected, editT(), true);
 }
+
+
+/* ---------- delete the clip being edited (tap twice) ---------- */
+let delTimer = null;
+function delReset() { clearTimeout(delTimer); delTimer = null; const b = $('edit-del'); b.classList.remove('sure'); b.textContent = 'Delete clip'; }
+function deleteClip(i) {
+  const c = clips[i]; if (!c) return;
+  stopPlay();
+  c.dead = true;
+  try { URL.revokeObjectURL(c.url); } catch (_) {}
+  if (c.thumbs) c.thumbs.forEach(t => { try { t.b.close(); } catch (_) {} });
+  c.thumbs = null;
+  const at = startsOf()[i] || 0;
+  clips.splice(i, 1);
+  pool.forEach(p => { p.removeAttribute('src'); delete p.dataset.url; });
+  closeScrubDecoder();
+  setShown(null);
+  closeEdit();
+  if (!clips.length) { head = 0; showLive(); return; }
+  renderTimeline();
+  goTo(Math.min(at, totalLen()));
+  renderAll();
+  say('Clip deleted', 1800);
+}
+$('edit-del').onclick = () => {
+  if (selected < 0) return;
+  const b = $('edit-del');
+  if (!b.classList.contains('sure')) {
+    b.classList.add('sure'); b.textContent = 'Tap again to delete';
+    delTimer = setTimeout(delReset, 3000);
+    return;
+  }
+  delReset();
+  deleteClip(selected);
+};
+$('edit-done').addEventListener('click', delReset);
 
 /* ---------- zoom + reframe straight on the picture ----------
    Pinch the picture to zoom the clip under the playhead; drag it to reframe. It stays that way.

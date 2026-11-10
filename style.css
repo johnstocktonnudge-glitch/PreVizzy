@@ -142,3 +142,8 @@ button { font:inherit; color:var(--text); }
 #rep { position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.94); color:#cfc; overflow:auto; padding:8px; }
 #rep[hidden] { display:none; }
 #rep-text { margin:8px 0 0; font:11px/1.3 monospace; white-space:pre-wrap; user-select:text; -webkit-user-select:text; }
+
+#edit-del { color:#ff8a80; border-color:#8a3b36; }
+#edit-del.sure { background:#b3261e; color:#fff; border-color:#b3261e; }
+
+.clip.deleting { background:#7a2b26 !important; outline:2px solid #ff8a80; transform:translateY(-6px); }
