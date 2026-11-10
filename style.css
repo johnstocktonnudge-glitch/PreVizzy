@@ -1,0 +1,71 @@
+/* PreVizzy styles - all visible and editable */
+:root { --red:#e5252a; --bg:#000; --panel:#16161a; --line:#2c2c33; --text:#f2f2f2; --dim:#9a9aa3; --accent:#ffb020; }
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+body { display:flex; flex-direction:column; padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+header { display:flex; justify-content:space-between; align-items:center; padding:8px 14px; }
+h1 { margin:0; font-size:18px; letter-spacing:.5px; }
+#count { color:var(--dim); font-size:14px; }
+main { flex:1; overflow-y:auto; display:flex; flex-direction:column; }
+#panel { display:flex; flex-direction:column; }
+
+button { font:inherit; color:var(--text); background:#2a2a31; border:1px solid var(--line); border-radius:12px; padding:12px 16px; min-height:48px; }
+button:active { background:#3a3a44; }
+button:disabled { opacity:.35; }
+button.quiet { background:transparent; }
+
+/* video area */
+#stage { position:relative; background:#000; width:100%; aspect-ratio:16/9; max-height:46vh; margin:0 auto; }
+#stage video { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000; }
+#stage video[hidden] { display:none; }
+#rec-badge { position:absolute; top:8px; left:10px; background:rgba(0,0,0,.6); color:var(--red); font-weight:700; padding:4px 10px; border-radius:20px; }
+#backlive { position:absolute; bottom:8px; right:8px; min-height:36px; padding:6px 12px; font-size:14px; background:rgba(0,0,0,.65); }
+#msg { position:absolute; left:8px; right:8px; bottom:8px; text-align:center; font-size:14px; color:var(--accent); pointer-events:none; }
+
+/* record row */
+#controls { display:flex; align-items:center; justify-content:space-around; padding:10px 14px; }
+.side { width:96px; }
+#rec { width:76px; height:76px; border-radius:50%; padding:0; background:#fff; border:4px solid #fff; display:grid; place-items:center; min-height:0; }
+#rec span { width:56px; height:56px; border-radius:50%; background:var(--red); display:block; transition:all .15s; }
+#rec.on span { width:30px; height:30px; border-radius:6px; }
+
+/* timeline */
+#timeline-wrap { padding:0 14px; }
+#timeline { display:flex; gap:6px; overflow-x:auto; padding:4px 0 8px; min-height:64px; align-items:stretch; }
+#timeline .empty { color:var(--dim); font-size:14px; align-self:center; }
+.clip { flex:0 0 auto; min-height:56px; padding:6px 8px; border-radius:10px; background:#23232b; border:2px solid var(--line); display:flex; flex-direction:column; justify-content:center; align-items:flex-start; font-size:13px; }
+.clip b { font-size:16px; }
+.clip.sel { border-color:var(--accent); }
+.clip.now { background:#3b2a10; }
+#trim { background:var(--panel); border-radius:12px; padding:8px 12px; margin-top:4px; }
+.row { display:flex; align-items:center; gap:10px; }
+.row label { width:44px; color:var(--dim); font-size:14px; }
+.row input[type=range] { flex:1; height:36px; accent-color:var(--accent); }
+#trim-info { text-align:center; color:var(--dim); font-size:14px; padding-top:2px; }
+
+#actions { display:flex; gap:10px; padding:12px 14px; }
+#save { flex:1; background:var(--red); border-color:var(--red); font-weight:600; }
+#save:disabled { background:#2a2a31; border-color:var(--line); }
+
+footer { display:flex; align-items:center; gap:10px; padding:6px 14px; border-top:1px solid var(--line); color:var(--dim); font-size:13px; flex-wrap:wrap; }
+footer button { min-height:36px; padding:4px 10px; font-size:13px; }
+
+/* saving overlay */
+#overlay { position:fixed; inset:0; background:rgba(0,0,0,.85); display:grid; place-items:center; z-index:10; padding:20px; }
+#overlay[hidden] { display:none; }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:20px; width:min(420px,100%); }
+.card h2 { margin:0 0 6px; font-size:18px; }
+.card p { margin:0 0 14px; color:var(--dim); }
+#bar { height:10px; background:#2a2a31; border-radius:6px; overflow:hidden; margin-bottom:16px; }
+#bar-fill { height:100%; width:0; background:var(--accent); }
+.row-btns { display:flex; gap:10px; }
+.row-btns button { flex:1; }
+#ov-save { background:var(--red); border-color:var(--red); font-weight:600; }
+
+/* phone held sideways: video on the left, controls on the right */
+@media (orientation:landscape) and (max-height:520px) {
+  main { flex-direction:row; }
+  #stage { width:58%; max-height:none; height:auto; align-self:flex-start; }
+  #panel { flex:1; overflow-y:auto; }
+  #controls { padding:6px 10px; }
+}
