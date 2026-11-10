@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver14';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver15';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -575,7 +575,8 @@ const tlEnd = e => {
 };
 tl.addEventListener('pointerup', tlEnd);
 tl.addEventListener('pointercancel', tlEnd);
-window.addEventListener('resize', () => { cacheRects(); updatePlayhead(); renderTrimBar(); });
+function setTopH() { document.documentElement.style.setProperty('--topbar-h', ($('top').offsetHeight - 8) + 'px'); }
+window.addEventListener('resize', () => { setTopH(); cacheRects(); updatePlayhead(); renderTrimBar(); });
 
 /* ---------- editing a clip: Trim, Zoom, Reframe ---------- */
 function openEdit(i) {
@@ -986,6 +987,7 @@ function resetTimeline() {
 
 /* ---------- screen state ---------- */
 function renderAll() {
+  setTopH();
   $('count').textContent = clips.length + '/' + MAX_CLIPS + (typeof pjFlag === 'function' ? pjFlag() : '');
   const full = clips.length >= MAX_CLIPS;
   app.classList.toggle('recording', recording);
