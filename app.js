@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver1';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver2';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -10,7 +10,7 @@ const MAX_SIDE = 1920;           // 1080p: longest side of the saved video
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest'];
 
 const $ = id => document.getElementById(id);
-const live = $('live'), play = $('play'), tl = $('timeline');
+const live = $('live'), play = $('play'), play2 = $('play2'), tl = $('timeline');
 const recBtn = $('rec'), flipBtn = $('flip'), playBtn = $('playall');
 const saveBtn = $('save'), clearBtn = $('clear'), backLive = $('backlive');
 const trimBox = $('trim'), trimIn = $('trim-in'), trimOut = $('trim-out'), trimInfo = $('trim-info');
@@ -72,6 +72,7 @@ function showLive() {
   stopPlay();
   play.pause();
   play.hidden = true;
+  play2.hidden = true;
   live.hidden = false;
   backLive.hidden = true;
 }
@@ -79,6 +80,7 @@ function showLive() {
 function showPlayer() {
   live.hidden = true;
   play.hidden = false;
+  play2.hidden = false;
   backLive.hidden = false;
 }
 
@@ -238,6 +240,9 @@ function stopPlay() {
   playToken++;
   if (playing) { playing = false; playingIdx = -1; play.pause(); }
   playBtn.textContent = 'Play all';
+  play.style.visibility = 'visible';
+  play2.style.visibility = 'hidden';
+  play2.pause();
   renderTimeline();
 }
 
@@ -248,33 +253,66 @@ async function playAll() {
   const token = ++playToken;
   playBtn.textContent = 'Stop';
   showPlayer();
-  play.muted = false;
+  play.muted = false; play2.muted = false;
+  // start both players inside the tap so the phone allows sound on each
   setSrc(play, clips[0]);
-  play.play().catch(() => {});          // started inside the tap so the phone allows sound
-  for (let i = 0; i < clips.length && token === playToken; i++) {
-    playingIdx = i;
-    renderTimeline();
-    await playClip(clips[i], token);
-  }
+  play.play().catch(() => {});
+  if (clips[1]) { setSrc(play2, clips[1]); play2.play().catch(() => {}); play2.pause(); }
+  await runTimeline(
+    [play, play2],
+    () => token !== playToken,
+    (v, i) => {                                   // a new clip takes over the screen
+      play.style.visibility = v === play ? 'visible' : 'hidden';
+      play2.style.visibility = v === play2 ? 'visible' : 'hidden';
+      playingIdx = i;
+      renderTimeline();
+    },
+    () => {}
+  );
   if (token === playToken) { playing = false; playingIdx = -1; playBtn.textContent = 'Play all'; renderTimeline(); }
 }
 
-async function playClip(c, token) {
-  await loadInto(play, c, c.inT);
-  if (token !== playToken) return;
-  await play.play().catch(() => {});
-  return new Promise(resolve => {
-    let lastT = play.currentTime, lastChange = performance.now();
-    const tick = () => {
-      if (token !== playToken) return resolve();
-      const t = play.currentTime;
-      if (t !== lastT) { lastT = t; lastChange = performance.now(); }
-      if (t >= c.outT - 0.03 || play.ended) { play.pause(); return resolve(); }
-      if (performance.now() - lastChange > 4000) { say('Playback blocked. Tap Play all again.', 4000); play.pause(); playToken++; return resolve(); }
-      requestAnimationFrame(tick);
-    };
-    tick();
-  });
+/* Plays the clips back to back using TWO video players so the cut is clean:
+   while one clip plays, the next is already loaded and sitting on its first frame.
+   Just before the cut the next player starts, and the picture swaps over as soon as
+   it is really showing frames.
+   isStopped()          -> true when playback/saving should stop
+   onShow(video, index) -> called when a clip takes over the screen
+   onTick(video, index, secondsIntoClip) -> called every frame */
+async function runTimeline(els, isStopped, onShow, onTick) {
+  const LEAD = 0.08;                               // start the next clip this early (seconds)
+  await loadInto(els[0], clips[0], clips[0].inT);
+  if (isStopped()) return;
+  onShow(els[0], 0);
+  await els[0].play().catch(() => {});
+  for (let i = 0; i < clips.length && !isStopped(); i++) {
+    const c = clips[i], v = els[i % 2], next = clips[i + 1], nv = els[(i + 1) % 2];
+    let ready = !next;
+    if (next) loadInto(nv, next, next.inT).then(() => { ready = true; });
+    await new Promise(resolve => {
+      let lastT = v.currentTime, lastChange = performance.now(), handing = false, handStart = 0;
+      const tick = () => {
+        if (isStopped()) return resolve();
+        const t = v.currentTime, now = performance.now();
+        if (t !== lastT) { lastT = t; lastChange = now; }
+        onTick(v, i, Math.max(0, t - c.inT));
+        const atEnd = t >= c.outT - (next ? LEAD : 0.03) || v.ended || now - lastChange > 4000;
+        if (!next) {
+          if (atEnd) { v.pause(); return resolve(); }
+        } else {
+          if (atEnd && ready && !handing) { handing = true; handStart = now; nv.play().catch(() => {}); }
+          if (handing && ((nv.currentTime > next.inT + 0.02 && nv.readyState >= 2) || now - handStart > 1000)) {
+            onShow(nv, i + 1);
+            v.pause();
+            return resolve();
+          }
+        }
+        requestAnimationFrame(tick);
+      };
+      tick();
+    });
+  }
+  els.forEach(e => e.pause());
 }
 
 /* ---------- save: play the timeline once into a low bit rate MP4 ---------- */
@@ -333,31 +371,17 @@ async function saveVideo() {
     };
 
     const total = clips.reduce((a, c) => a + (c.outT - c.inT), 0);
-    let doneT = 0;
-    for (let i = 0; i < clips.length && !exportCancel; i++) {
-      const c = clips[i], v = els[i % 2], next = clips[i + 1];
-      await loadInto(v, c, c.inT);
-      // get the next clip ready while this one plays, so the join has no pause
-      const preload = next ? loadInto(els[(i + 1) % 2], next, next.inT) : Promise.resolve();
-      await v.play().catch(() => {});
-      await new Promise(resolve => {
-        let lastT = v.currentTime, lastChange = performance.now();
-        const tick = () => {
-          if (exportCancel) return resolve();
-          const t = v.currentTime;
-          if (t !== lastT) { lastT = t; lastChange = performance.now(); }
-          draw(v);
-          const p = (doneT + Math.max(0, t - c.inT)) / total;
-          $('bar-fill').style.width = Math.min(100, p * 100) + '%';
-          if (t >= c.outT - 0.03 || v.ended) { v.pause(); return resolve(); }
-          if (performance.now() - lastChange > 4000) { v.pause(); return resolve(); }
-          requestAnimationFrame(tick);
-        };
-        tick();
-      });
-      doneT += c.outT - c.inT;
-      await preload;
-    }
+    const before = [];                                   // seconds of video before each clip
+    clips.reduce((acc, c, i) => { before[i] = acc; return acc + (c.outT - c.inT); }, 0);
+    await runTimeline(
+      els,
+      () => exportCancel,
+      () => {},
+      (v, i, t) => {
+        draw(v);
+        $('bar-fill').style.width = Math.min(100, (before[i] + t) / total * 100) + '%';
+      }
+    );
     await new Promise(r => setTimeout(r, 250));   // let the last frame land
     rec.stop();
     await stopped;
