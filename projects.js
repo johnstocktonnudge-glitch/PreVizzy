@@ -33,8 +33,10 @@ const pjDirty = () => clips.length > 0 && sigOf() !== savedSig;
 function pjDetach() { curPid = null; curName = ''; savedSig = ''; }
 function pjFlag() { return clips.length ? (pjDirty() ? '  • unsaved' : (curPid ? '  • saved' : '')) : ''; }
 setInterval(() => {
-  if (!recording) $('count').textContent = clips.length + '/' + MAX_CLIPS + pjFlag();
-  $('savepj').disabled = !clips.length || recording || exporting;
+  const txt = clips.length + '/' + MAX_CLIPS + pjFlag();
+  if (!recording && $('count').textContent !== txt) $('count').textContent = txt;     // only touch the page when it changed
+  const off = !clips.length || recording || exporting;
+  if ($('savepj').disabled !== off) $('savepj').disabled = off;
 }, 800);
 window.addEventListener('beforeunload', e => { if (pjDirty()) { e.preventDefault(); e.returnValue = ''; } });
 

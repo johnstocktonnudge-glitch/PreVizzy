@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver17';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver18';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -364,6 +364,16 @@ function drawView(v, c, alpha, over) {
   vctx.filter = (MONO_CTX && app.classList.contains('mono')) ? 'grayscale(1)' : 'none';   // B&W is drawn into the picture itself
   drawFrame(vctx, W, H, v, c, alpha, over);
   vctx.filter = 'none';
+  paintNudge(c);
+}
+// make sure the phone repaints the picture (some phones skip repaints of a canvas that changes under a slider)
+let nudge = 0;
+function paintNudge(c) {
+  view.style.opacity = (nudge++ % 2) ? '1' : '0.999';
+  if (!$('dbg').hidden && selected >= 0 && mode === 'review') {      // debug only: print the zoom on the picture
+    vctx.fillStyle = '#ff0'; vctx.font = 'bold 44px monospace';
+    vctx.fillText('clip' + (clips.indexOf(c) + 1) + ' zoom ' + (c.zoom || 1).toFixed(2) + ' px ' + (c.px || 0).toFixed(2) + ' #' + nudge, 24, 70);
+  }
 }
 
 function redraw() {
@@ -435,7 +445,7 @@ function thumbAt(c, t) {
   return th[lo];
 }
 function goTo(T, fast) {
-  dbg('goTo ' + T.toFixed(2) + (fast ? ' fast' : '') + ' sel' + selected);                  // move the playhead and show that frame
+                  // move the playhead and show that frame
   const total = totalLen();
   head = Math.max(0, Math.min(T, total));
   const loc = locate(head);
@@ -585,6 +595,7 @@ window.addEventListener('resize', () => { setTopH(); cacheRects(); updatePlayhea
 
 /* ---------- editing a clip: Trim, Zoom, Reframe ---------- */
 function openEdit(i) {
+  dbg('openEdit ' + i);
   selected = i;
   fastScrub = false;
   $('edit').hidden = false;
@@ -682,6 +693,7 @@ tbar.addEventListener('pointercancel', () => { tdrag = null; });
 
 // Zoom: slider
 $('zoom').oninput = () => {
+  dbg('slider ' + $('zoom').value + ' sel' + selected);
   const c = clips[selected]; if (!c) return;
   c.zoom = Math.min(MAX_ZOOM, Math.max(1, +$('zoom').value));
   if (c.zoom === 1) { c.px = 0; c.py = 0; }
