@@ -95,7 +95,12 @@ button { font:inherit; color:var(--text); }
 
 /* while recording: clear the screen, leave only what matters */
 #app.recording #bottom, #app.recording #center-play, #app.recording #golive,
-#app.recording #flip, #app.recording #save, #app.recording #more, #app.recording #count { visibility:hidden; }
+#app.recording #flip, #app.recording #lens, #app.recording #save, #app.recording #more, #app.recording #count { visibility:hidden; }
 
 /* hidden players, kept in the page so the phone keeps decoding them */
 #pool video { position:fixed; left:0; top:0; width:2px; height:2px; opacity:.01; pointer-events:none; }
+
+/* live zoom chip: tap to go back to 1x */
+#zchip { position:absolute; left:12px; top:50%; transform:translateY(-50%); background:var(--glass); border:1px solid var(--line); border-radius:20px; padding:0 12px; min-height:40px; font-size:15px; font-weight:600; z-index:5; }
+#app.reviewing #zchip { display:none; }
+#stage { touch-action:none; }

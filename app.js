@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver5';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver6';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -73,25 +73,39 @@ function stopCamera() {
 }
 
 let camTries = 0;
+let track = null, zcap = null, zoomNow = 1, backCams = [], lensId = null;
+const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+async function openStream(video, audio) {
+  return navigator.mediaDevices.getUserMedia({ video, audio });
+}
 async function startCamera() {
   stopCamera();
+  track = null; zcap = null;
   say('Starting camera...');
-  const video = { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } };
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ video, audio: true });
-  } catch (e) {
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
-      say('No microphone: clips will be silent.', 5000);
-    } catch (e2) {
-      say('Camera problem: ' + (e2.name || '') + ' ' + (e2.message || '') + '  (tap the picture to retry)');
-      stream = null;
+  const base = { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 }, zoom: true };
+  const saved = facing === 'environment' ? lsGet('pv_cam') : null;
+  const tries = [];
+  if (saved) tries.push({ ...base, deviceId: { exact: saved } });
+  tries.push({ ...base, facingMode: { ideal: facing } });
+  tries.push({ width: { ideal: 1920 }, height: { ideal: 1080 }, facingMode: { ideal: facing } });
+  let noMic = false;
+  for (const v of tries) {
+    try { stream = await openStream(v, true); break; } catch (e) {
+      if (e && e.name === 'NotAllowedError') { stream = null; break; }
+      try { stream = await openStream(v, false); noMic = true; break; } catch (e2) { stream = null; }
     }
   }
+  if (!stream) say('Camera problem: could not start it  (tap the picture to retry)');
+  else if (noMic) say('No microphone: clips will be silent.', 5000);
   if (stream) {
     live.srcObject = stream;
     live.play().catch(() => {});
     if ($('msg').textContent.startsWith('Starting')) say('');
+    track = stream.getVideoTracks()[0];
+    try { const cp = track.getCapabilities ? track.getCapabilities() : {}; zcap = cp.zoom && cp.zoom.max > cp.zoom.min ? cp.zoom : null; } catch (e) {}
+    try { zoomNow = (track.getSettings().zoom) || (zcap ? zcap.min : 1); lensId = track.getSettings().deviceId || null; } catch (e) {}
+    findLenses();
     const mine = stream;   // black picture check: if no frames arrive, try once more
     setTimeout(() => {
       if (stream === mine && !recording && live.videoWidth === 0 && camTries < 2) { camTries++; startCamera(); }
@@ -100,6 +114,56 @@ async function startCamera() {
   }
   renderAll();
 }
+
+/* ---------- lens + zoom ---------- */
+async function findLenses() {
+  try {
+    const all = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+    backCams = all.filter(d => !/front|user/i.test(d.label)).map(d => d.deviceId);
+  } catch (e) { backCams = []; }
+  renderAll();
+}
+function updateZoomUI() {
+  const z = $('zchip');
+  z.hidden = mode !== 'live' || !stream || !zcap;
+  z.textContent = zoomNow.toFixed(1) + '\u00d7';
+}
+let zPending = null, zBusy = false;
+function setZoom(v) {
+  if (!track || !zcap) return;
+  v = Math.max(zcap.min, Math.min(zcap.max, v));
+  zoomNow = v; zPending = v; updateZoomUI();
+  if (zBusy) return;
+  zBusy = true;
+  requestAnimationFrame(async function go() {
+    const z = zPending; zPending = null;
+    try { await track.applyConstraints({ advanced: [{ zoom: z }] }); } catch (e) {}
+    if (zPending !== null) requestAnimationFrame(go); else zBusy = false;
+  });
+}
+$('zchip').onclick = e => { e.stopPropagation(); setZoom(zcap ? zcap.min : 1); };
+$('lens').onclick = () => {
+  if (backCams.length < 2) return;
+  const i = backCams.indexOf(lensId);
+  lsSet('pv_cam', backCams[(i + 1) % backCams.length]);
+  facing = 'environment';
+  startCamera();
+};
+// pinch on the live picture
+const pts = new Map(); let pinch = null;
+stage.addEventListener('pointerdown', e => {
+  if (mode !== 'live' || !zcap) return;
+  pts.set(e.pointerId, [e.clientX, e.clientY]);
+  if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), z: zoomNow }; }
+});
+stage.addEventListener('pointermove', e => {
+  if (!pts.has(e.pointerId)) return;
+  pts.set(e.pointerId, [e.clientX, e.clientY]);
+  if (pinch && pts.size === 2) { const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (pinch.d > 10) setZoom(pinch.z * d / pinch.d); }
+});
+const pinchEnd = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
+stage.addEventListener('pointerup', pinchEnd);
+stage.addEventListener('pointercancel', pinchEnd);
 
 /* ---------- live camera / review of the timeline ---------- */
 function showLive() {
@@ -766,6 +830,10 @@ function renderAll() {
   recBtn.disabled = !stream || exporting || (full && !recording);
   flipBtn.disabled = recording || exporting || mode === 'review';
   flipBtn.style.visibility = mode === 'review' ? 'hidden' : '';
+  const lensOk = mode === 'live' && facing === 'environment' && backCams.length > 1;
+  $('lens').hidden = !lensOk;
+  if (lensOk) { const i = backCams.indexOf(lensId); $('lens').textContent = 'Lens ' + ((i < 0 ? 0 : i) + 1) + '/' + backCams.length; $('lens').disabled = recording || exporting; }
+  updateZoomUI();
   playBtn.disabled = !clips.length || recording || exporting;
   const want = playing ? 'pause' : 'play';
   if (playBtn.dataset.icon !== want) { playBtn.dataset.icon = want; playBtn.innerHTML = playing ? ICON_PAUSE : ICON_PLAY; }
