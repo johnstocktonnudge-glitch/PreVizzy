@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver27';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver28';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -51,7 +51,7 @@ const clock = s => { s = Math.max(0, s); return Math.floor(s / 60) + ':' + Strin
 const once = (el, ev) => new Promise(r => el.addEventListener(ev, r, { once: true }));
 const lenOf = c => c.outT - c.inT;
 const minLen = c => Math.min(MIN_CLIP, c.dur / 2);
-const JOINS = { b: 4 / 30, f2: 2, f4: 4 };     // blend (4 frames) / 2 second fade / 4 second fade
+const JOINS = { c: 0, b: 4 / 30, f2: 2, f4: 4 };     // blend (4 frames) / 2 second fade / 4 second fade
 const joinOf = c => (c && c.join) || 'b';
 const wcPossible = () => WC_OK && clips.every(c => !c.ready || c.demux);
 // how much clip i overlaps clip i+1 (seconds). Kept inside what the clips can give.
@@ -516,7 +516,7 @@ function renderTimeline() {
     const b = document.createElement('div');
     b.className = 'clip' + (i === selected ? ' sel' : '') + (i === playIdx ? ' now' : '') + (i === movingIdx ? ' moving' : '');
     b.style.flexGrow = Math.max(0.05, eff[i]);
-    const jn = i < clips.length - 1 && joinOf(c) !== 'b' ? '<span class="jn">' + (joinOf(c) === 'f2' ? '2s' : '4s') + '</span>' : '';
+    const jn = i < clips.length - 1 && (joinOf(c) === 'f2' || joinOf(c) === 'f4') ? '<span class="jn">' + (joinOf(c) === 'f2' ? '2s' : '4s') + '</span>' : '';
     b.innerHTML = '<b>' + (c.id || i + 1) + '</b>' + fmt(lenOf(c)) + jn;
     tlClips.appendChild(b);
   });
@@ -698,7 +698,8 @@ function renderTrimBar() {
 function fadeNeed(i, trial) {
   const n = clips.length, j = k => (trial && trial.k === k) ? trial.kind : joinOf(clips[k]);
   const L = i > 0 ? j(i - 1) : null, R = i < n - 1 ? j(i) : null;
-  if ((!L || L === 'b') && (!R || R === 'b')) return 0;
+  const plain = x => !x || x === 'b' || x === 'c';
+  if (plain(L) && plain(R)) return 0;
   return (L ? JOINS[L] : 0) + (R ? JOINS[R] : 0);
 }
 document.querySelectorAll('.jbtn').forEach(b => {
@@ -777,6 +778,35 @@ function showClipFrameForEdit() {
   queueShow(selected, editT(), true);
 }
 
+
+/* ---------- split the clip at the playhead (CTI) ---------- */
+function splitAtHead() {
+  if (clips.length >= MAX_CLIPS) { say('Maximum ' + MAX_CLIPS + ' clips', 2200); return; }
+  const loc = locate(head); if (!loc) return;
+  const i = loc.i;
+  if (selected >= 0 && selected !== i) { say('Move the playhead onto this clip first', 2400); return; }
+  const c = clips[i], t = loc.t;
+  if (t - c.inT < MIN_CLIP || c.outT - t < MIN_CLIP) { say('Too close to the end of the clip', 2200); return; }
+  stopPlay();
+  const old = { outT: c.outT, join: c.join };
+  const b = { id: ++clipSeq, url: URL.createObjectURL(c.blob), blob: c.blob, dur: c.dur, inT: t, outT: old.outT, w: c.w, h: c.h, zoom: c.zoom, px: c.px || 0, py: c.py || 0, join: old.join, ready: false, demux: null, abuf: null };
+  c.outT = t; c.join = 'c';                       // the two halves meet with a plain cut
+  clips.splice(i + 1, 0, b);
+  if (fadeNeed(i) > lenOf(c) + 1e-6 || fadeNeed(i + 1) > lenOf(b) + 1e-6) {      // a fade next to it would not fit
+    clips.splice(i + 1, 1); URL.revokeObjectURL(b.url); clipSeq--; c.outT = old.outT; c.join = old.join;
+    say('Clip not long enough', 2200); return;
+  }
+  setShown(null);
+  head = startsOf()[i + 1];
+  startPrep(b);
+  renderTimeline();
+  updatePlayhead();
+  if (selected >= 0) { selected = i; renderEdit(); }
+  renderAll();
+  refreshStill();
+  say('Split: now ' + clips.length + ' clips', 1800);
+}
+$('edit-split').onclick = splitAtHead;
 
 /* ---------- delete the clip being edited (tap twice) ---------- */
 let delTimer = null;
