@@ -147,3 +147,6 @@ button { font:inherit; color:var(--text); }
 #edit-del.sure { background:#b3261e; color:#fff; border-color:#b3261e; }
 
 .clip.deleting { background:#7a2b26 !important; outline:2px solid #ff8a80; transform:translateY(-6px); }
+
+#timerow .grow { flex:1; }
+#undo, #redo { padding:0 12px; }

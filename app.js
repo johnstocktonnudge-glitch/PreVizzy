@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver28';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver29';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -191,7 +191,7 @@ function setZoom(v) {
 }
 $('zchip').onclick = e => {
   e.stopPropagation();
-  if (mode === 'review') { const c = curClip(); if (c) { c.zoom = 1; c.px = 0; c.py = 0; if (!previewNow()) refreshStill(); refreshStill(); updateZoomUI(); } return; }
+  if (mode === 'review') { const c = curClip(); if (c) { const before = snapNow(); c.zoom = 1; c.px = 0; c.py = 0; if (!sameSnap(before, snapNow())) commitUndo(before); if (!previewNow()) refreshStill(); refreshStill(); updateZoomUI(); } return; }
   setZoom(zcap ? zcap.min : 1);
 };
 $('lens').onclick = () => {
@@ -282,6 +282,7 @@ async function onRecStopped() {
   // goes straight to the end of the timeline
   const clip = { id: ++clipSeq, url, blob, dur: info.dur, inT: 0, outT: info.dur, w: info.w, h: info.h, zoom: 1, px: 0, py: 0, ready: false, demux: null, abuf: null };
   clips.push(clip);
+  undoClear();                                      // a new take starts a fresh undo list
   head = totalLen();
   renderAll();
   startPrep(clip);
@@ -583,7 +584,7 @@ tl.addEventListener('pointerdown', e => {
     const h = hit(mine.x);
     if (!h) return;
     stopPlay();
-    mine.mv = true; mine.idx = h.i; movingIdx = h.i;
+    mine.mv = true; mine.idx = h.i; movingIdx = h.i; mine.before = snapNow();
     if (navigator.vibrate) navigator.vibrate(30);
     renderTimeline();
     say('Swipe left or right to move it, up to delete it', 2200);
@@ -631,6 +632,7 @@ const tlEnd = e => {
   const quick = performance.now() - tp.t0 < 400 && Math.abs(e.clientX - tp.x) < 24;
   const wasTap = (!tp.moved || quick) && !tp.mv;
   const wasMove = tp.mv, wasScrub = tp.moved;
+  if (tp.mv && !tp.gone && tp.before && !sameSnap(tp.before, snapNow())) commitUndo(tp.before);
   tp = null;
   if (wasScrub && fastScrub) { fastScrub = false; refreshStill(); }       // finger lifted: show the exact frame
   if (wasMove) { movingIdx = -1; renderTimeline(); return; }
@@ -708,7 +710,9 @@ document.querySelectorAll('.jbtn').forEach(b => {
     if (i < 0 || i >= clips.length - 1) return;
     const t = { k: i, kind };
     if (fadeNeed(i, t) > lenOf(clips[i]) + 1e-6 || fadeNeed(i + 1, t) > lenOf(clips[i + 1]) + 1e-6) { say('Clip not long enough', 2200); return; }
+    const before = snapNow();
     clips[i].join = kind;
+    if (!sameSnap(before, snapNow())) commitUndo(before);
     stopPlay();
     renderEdit(); renderTimeline(); updatePlayhead(); refreshStill();
   };
@@ -717,6 +721,7 @@ document.querySelectorAll('.jbtn').forEach(b => {
 // Trim: drag a yellow handle (nearest one moves)
 let tdrag = null;
 const tbar = $('tbar');
+let tBefore = null;
 function moveTrim(e) {
   const c = clips[selected]; if (!c) return;
   const r = tbar.getBoundingClientRect();
@@ -739,11 +744,17 @@ tbar.addEventListener('pointerdown', e => {
   const r = tbar.getBoundingClientRect();
   const xin = r.left + c.inT / c.dur * r.width, xout = r.left + c.outT / c.dur * r.width;
   tdrag = Math.abs(e.clientX - xin) <= Math.abs(e.clientX - xout) ? 'in' : 'out';
+  tBefore = snapNow();
   tbar.setPointerCapture(e.pointerId);
   moveTrim(e);
 });
 tbar.addEventListener('pointermove', e => { if (tdrag) moveTrim(e); });
-const tEnd = () => { if (!tdrag) return; tdrag = null; fastScrub = false; refreshStill(); };   // let go: draw the exact frame
+const tEnd = () => {
+  if (!tdrag) return;
+  tdrag = null; fastScrub = false; refreshStill();
+  if (tBefore && !sameSnap(tBefore, snapNow())) commitUndo(tBefore);
+  tBefore = null;
+};   // let go: draw the exact frame
 tbar.addEventListener('pointerup', tEnd);
 tbar.addEventListener('pointercancel', tEnd);
 
@@ -779,6 +790,70 @@ function showClipFrameForEdit() {
 }
 
 
+/* ---------- undo / redo (last 3 steps each; clips kept for undo are freed as soon as they drop off) ---------- */
+const UMAX = 3;
+let undoS = [], redoS = [];
+const snapNow = () => ({ head, list: clips.map(c => ({ c, inT: c.inT, outT: c.outT, zoom: c.zoom || 1, px: c.px || 0, py: c.py || 0, join: c.join })) });
+const sameSnap = (x, y) => x.list.length === y.list.length && x.list.every((e, k) => { const f = y.list[k]; return e.c === f.c && e.inT === f.inT && e.outT === f.outT && e.zoom === f.zoom && e.px === f.px && e.py === f.py && e.join === f.join; });
+function disposeClip(c) {
+  if (c.dead) return;
+  c.dead = true;
+  try { URL.revokeObjectURL(c.url); } catch (_) {}
+  if (c.thumbs) c.thumbs.forEach(t => { try { t.b.close(); } catch (_) {} });
+  c.thumbs = null; c.demux = null; c.abuf = null;
+}
+function gcSnaps(dropped) {                                    // free any clip that no longer appears anywhere
+  const keep = new Set(clips);
+  undoS.concat(redoS).forEach(s => s.list.forEach(e => keep.add(e.c)));
+  dropped.forEach(s => s.list.forEach(e => { if (!keep.has(e.c)) disposeClip(e.c); }));
+}
+function updateUR() {
+  $('undo').disabled = !undoS.length || recording || exporting;
+  $('redo').disabled = !redoS.length || recording || exporting;
+  $('undo').textContent = undoS.length ? 'Undo ' + undoS.length : 'Undo';
+  $('redo').textContent = redoS.length ? 'Redo ' + redoS.length : 'Redo';
+}
+function commitUndo(before) {                                   // call after a change; `before` was taken just before it
+  undoS.push(before);
+  const dropped = redoS.splice(0);
+  while (undoS.length > UMAX) dropped.push(undoS.shift());
+  gcSnaps(dropped);
+  updateUR();
+}
+function undoClear() {
+  const dropped = undoS.concat(redoS);
+  undoS = []; redoS = [];
+  gcSnaps(dropped);
+  updateUR();
+}
+function applySnap(s) {
+  stopPlay();
+  clips = s.list.map(e => { const c = e.c; c.inT = e.inT; c.outT = e.outT; c.zoom = e.zoom; c.px = e.px; c.py = e.py; c.join = e.join; return c; });
+  pool.forEach(p => { p.removeAttribute('src'); delete p.dataset.url; });
+  closeScrubDecoder();
+  setShown(null);
+  closeEdit();
+  if (!clips.length) { head = 0; showLive(); updateUR(); return; }
+  head = Math.min(s.head, totalLen());
+  renderTimeline();
+  goTo(head);
+  renderAll();
+  updateUR();
+}
+function stepHistory(from, to, word) {
+  if (!from.length || recording || exporting) return;
+  const s = from.pop();
+  to.push(snapNow());
+  const dropped = [];
+  while (to.length > UMAX) dropped.push(to.shift());
+  applySnap(s);
+  gcSnaps(dropped);
+  say(word, 1200);
+  updateUR();
+}
+$('undo').onclick = () => stepHistory(undoS, redoS, 'Undo');
+$('redo').onclick = () => stepHistory(redoS, undoS, 'Redo');
+
 /* ---------- split the clip at the playhead (CTI) ---------- */
 function splitAtHead() {
   if (clips.length >= MAX_CLIPS) { say('Maximum ' + MAX_CLIPS + ' clips', 2200); return; }
@@ -788,14 +863,16 @@ function splitAtHead() {
   const c = clips[i], t = loc.t;
   if (t - c.inT < MIN_CLIP || c.outT - t < MIN_CLIP) { say('Too close to the end of the clip', 2200); return; }
   stopPlay();
+  const before = snapNow();
   const old = { outT: c.outT, join: c.join };
   const b = { id: ++clipSeq, url: URL.createObjectURL(c.blob), blob: c.blob, dur: c.dur, inT: t, outT: old.outT, w: c.w, h: c.h, zoom: c.zoom, px: c.px || 0, py: c.py || 0, join: old.join, ready: false, demux: null, abuf: null };
-  c.outT = t; c.join = 'c';                       // the two halves meet with a plain cut
+  c.outT = t; c.join = 'b';                       // the new clip is an ordinary clip (normal blend)
   clips.splice(i + 1, 0, b);
   if (fadeNeed(i) > lenOf(c) + 1e-6 || fadeNeed(i + 1) > lenOf(b) + 1e-6) {      // a fade next to it would not fit
     clips.splice(i + 1, 1); URL.revokeObjectURL(b.url); clipSeq--; c.outT = old.outT; c.join = old.join;
     say('Clip not long enough', 2200); return;
   }
+  commitUndo(before);
   setShown(null);
   head = startsOf()[i + 1];
   startPrep(b);
@@ -814,12 +891,10 @@ function delReset() { clearTimeout(delTimer); delTimer = null; const b = $('edit
 function deleteClip(i) {
   const c = clips[i]; if (!c) return;
   stopPlay();
-  c.dead = true;
-  try { URL.revokeObjectURL(c.url); } catch (_) {}
-  if (c.thumbs) c.thumbs.forEach(t => { try { t.b.close(); } catch (_) {} });
-  c.thumbs = null;
+  const before = snapNow();
   const at = startsOf()[i] || 0;
   clips.splice(i, 1);
+  commitUndo(before);                                  // the clip itself is kept until it drops off the undo list
   pool.forEach(p => { p.removeAttribute('src'); delete p.dataset.url; });
   closeScrubDecoder();
   setShown(null);
@@ -847,7 +922,7 @@ $('edit-done').addEventListener('click', delReset);
    Pinch the picture to zoom the clip under the playhead; drag it to reframe. It stays that way.
    While your fingers are down the picture comes from the small scrub pictures (instant);
    when you let go the full quality frame is drawn. */
-const ep = new Map(); let eg = null;                      // fingers on the picture, and the gesture they make
+const ep = new Map(); let eg = null, zBefore = null;                      // fingers on the picture, and the gesture they make
 function curClip() { if (!clips.length) return null; const l = locate(head); return l ? clips[l.i] : null; }
 function previewNow() {                                   // draw the clip under the playhead with its zoom, right now
   const l = locate(head); if (!l) return false;
@@ -863,6 +938,7 @@ stage.addEventListener('pointerdown', e => {
   if (mode !== 'review' || playing || recording || exporting || !clips.length || e.target.closest('button')) return;
   const c = curClip(); if (!c) return;
   ep.set(e.pointerId, [e.clientX, e.clientY]);
+  if (ep.size === 1) zBefore = snapNow();
   try { stage.setPointerCapture(e.pointerId); } catch (_) {}
   if (ep.size === 2) {
     const [p, q] = [...ep.values()];
@@ -903,6 +979,8 @@ const eEnd = e => {
   if (ep.size === 0) {
     const had = !!eg || fastScrub;
     eg = null;
+    if (zBefore && !sameSnap(zBefore, snapNow())) commitUndo(zBefore);
+    zBefore = null;
     if (had) { fastScrub = false; refreshStill(); updateZoomUI(); }
   }
 };
@@ -1156,14 +1234,16 @@ $('ov-save').onclick = async () => {
 /* ---------- clear ---------- */
 function clearAll() {
   if (!clips.length) { say('Nothing to clear.', 2000); $('menu').hidden = true; return; }
-  if (!confirm('Delete all ' + clips.length + ' clips from the timeline and free their space? (Saved projects are not touched.)')) return;
+  if (!confirm('Clear the ' + clips.length + ' clips off the timeline and free their space?\n\nSaved projects and saved videos are NOT deleted.')) return;
   resetTimeline();
 }
 function resetTimeline() {
   if (typeof pjDetach === 'function') pjDetach();
   stopPlay();
   closeEdit();
-  clips.forEach(c => { URL.revokeObjectURL(c.url); c.dead = true; if (c.thumbs) c.thumbs.forEach(t => { try { t.b.close(); } catch (_) {} }); c.thumbs = null; });
+  clips.forEach(disposeClip);
+  undoS.concat(redoS).forEach(s => s.list.forEach(e => disposeClip(e.c)));
+  undoS = []; redoS = []; updateUR();
   clips = []; head = 0; clipSeq = 0; setShown(null);
   pool.forEach(p => { p.removeAttribute('src'); delete p.dataset.url; });
   $('menu').hidden = true;
@@ -1179,6 +1259,7 @@ function renderAll() {
   app.classList.toggle('recording', recording);
   app.classList.toggle('editing', selected >= 0);
   recBtn.classList.toggle('on', recording);
+  updateUR();
   recBtn.disabled = !stream || exporting || (full && !recording);
   flipBtn.disabled = recording || exporting || mode === 'review';
   flipBtn.style.visibility = mode === 'review' ? 'hidden' : '';

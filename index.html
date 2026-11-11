@@ -55,7 +55,7 @@
     <button id="pj-open" class="pill">Projects</button>
     <button id="pj-saveas" class="pill">Save project as...</button>
     <button id="pj-new" class="pill">New project</button>
-    <button id="clear" class="pill">Clear timeline (delete clips)</button>
+    <button id="clear" class="pill">Clear timeline (unsaved clips only)</button>
   </div>
 
   <!-- Bottom: edit panel, transport, timeline -->
@@ -84,7 +84,6 @@
       </div>
       <div id="pane-join" class="pane" hidden>
         <span id="jhint">Join to next clip:</span>
-        <button class="pill jbtn" data-join="c">Cut</button>
         <button class="pill jbtn" data-join="b">Blend</button>
         <button class="pill jbtn" data-join="f2">Fade 2s</button>
         <button class="pill jbtn" data-join="f4">Fade 4s</button>
@@ -98,6 +97,9 @@
     <div id="timerow">
       <button id="playbtn" aria-label="Play / Pause"></button>
       <span id="time">0:00 / 0:00</span>
+      <span class="grow"></span>
+      <button id="undo" class="pill" disabled>Undo</button>
+      <button id="redo" class="pill" disabled>Redo</button>
     </div>
 
     <div id="tl">
