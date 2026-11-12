@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver32';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver33';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -696,9 +696,28 @@ function updatePair() {
   v2ctx.filter = 'none';
 }
 
+/* the clips either side of the one being trimmed stay on the timeline row: tap one to trim that clip next */
+function updateNb() {
+  [['nb-l', -1, '\u2039 '], ['nb-r', 1, ' \u203a']].forEach(([id, d, ar]) => {
+    const el = $(id), k = clips[selected + d];
+    el.style.visibility = (selected >= 0 && k) ? 'visible' : 'hidden';
+    if (k) el.innerHTML = '<b>' + (d < 0 ? ar : '') + (k.id || selected + d + 1) + (d > 0 ? ar : '') + '</b>' + fmt(lenOf(k));
+  });
+}
+['nb-l', 'nb-r'].forEach((id, n) => {
+  const el = $(id);
+  el.addEventListener('pointerdown', e => e.stopPropagation());
+  el.addEventListener('click', () => {
+    const i = selected + (n ? 1 : -1);
+    if (!clips[i]) return;
+    stopPlay(); goTo(startsOf()[i]); openEdit(i);
+  });
+});
+
 function renderEdit() {
   const c = clips[selected];
   if (!c) return;
+  updateNb();
   $('edit-title').textContent = 'Clip ' + (c.id || selected + 1);
   renderTrimBar();
   $('zoom').value = c.zoom;
