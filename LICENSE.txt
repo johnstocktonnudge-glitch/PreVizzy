@@ -1,0 +1,21 @@
+PreVizzy licence
+
+Copyright (c) 2026 John Stockton (GitHub: johnstocktonnudge-glitch). All rights reserved except as stated here.
+
+1. Free to use. You may use PreVizzy for any purpose, personal or commercial, including on paid film, video or other client work, free of charge.
+
+2. Not for sale. You may not sell, resell, rent, lease or sublicense PreVizzy, or any copy or modified version of it. You may not put it inside anything you charge for (an app store listing, a paid bundle, a paid course or a subscription). Using it while you work for paying clients is fine. Charging for the app itself is not.
+
+3. Sharing. You may share a link to PreVizzy, or pass on an unmodified copy, free of charge, as long as this licence and the copyright notice stay with it.
+
+4. Changes. You may change a copy for your own use. You may not publish or distribute changed versions without written permission.
+
+5. Ownership. John Stockton owns PreVizzy, its name, its icons and its design. This licence does not transfer ownership or any other right to you. You may not claim it as your own, remove the notices, or register or claim ownership of it or its name.
+
+6. No warranty. PreVizzy is provided "as is", with no promise that it will work, be error free, or keep your data safe. To the fullest extent the law allows, the owner is not liable for lost footage, lost data, lost time or any other loss or damage from using it. Back up your work with Save project.
+
+7. Privacy. Your clips and projects stay on your own device. The camera picture is never sent anywhere. The app collects nothing. When online it loads its own files and checks for updates.
+
+8. Other people's code. The code in this app was written for it and has no outside libraries.
+
+9. Ending. If you break these terms, your permission to use PreVizzy ends. This licence is governed by the law of England and Wales.

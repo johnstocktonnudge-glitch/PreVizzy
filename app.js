@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver33';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver34';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -1394,6 +1394,8 @@ async function cameraReport() {
   P('\n(done - screenshot this and send it)');
   if (wasLive) startCamera();
 }
+const TERMS = "PreVizzy licence\n\nCopyright (c) 2026 John Stockton (GitHub: johnstocktonnudge-glitch). All rights reserved except as stated here.\n\n1. Free to use. You may use PreVizzy for any purpose, personal or commercial, including on paid film, video or other client work, free of charge.\n\n2. Not for sale. You may not sell, resell, rent, lease or sublicense PreVizzy, or any copy or modified version of it. You may not put it inside anything you charge for (an app store listing, a paid bundle, a paid course or a subscription). Using it while you work for paying clients is fine. Charging for the app itself is not.\n\n3. Sharing. You may share a link to PreVizzy, or pass on an unmodified copy, free of charge, as long as this licence and the copyright notice stay with it.\n\n4. Changes. You may change a copy for your own use. You may not publish or distribute changed versions without written permission.\n\n5. Ownership. John Stockton owns PreVizzy, its name, its icons and its design. This licence does not transfer ownership or any other right to you. You may not claim it as your own, remove the notices, or register or claim ownership of it or its name.\n\n6. No warranty. PreVizzy is provided \"as is\", with no promise that it will work, be error free, or keep your data safe. To the fullest extent the law allows, the owner is not liable for lost footage, lost data, lost time or any other loss or damage from using it. Back up your work with Save project.\n\n7. Privacy. Your clips and projects stay on your own device. The camera picture is never sent anywhere. The app collects nothing. When online it loads its own files and checks for updates.\n\n8. Other people's code. The code in this app was written for it and has no outside libraries.\n\n9. Ending. If you break these terms, your permission to use PreVizzy ends. This licence is governed by the law of England and Wales.\n";
+$('termsbtn').onclick = () => { $('rep-text').textContent = 'PreVizzy ' + APP_VER + '\n\n' + TERMS; $('rep').hidden = false; $('menu').hidden = true; };
 $('repbtn').onclick = () => { if (recording || exporting) { say('Stop first.', 2000); return; } cameraReport(); };
 $('rep-close').onclick = () => { $('rep').hidden = true; };
 $('dbgbtn').onclick = () => { const d = $('dbg'); d.hidden = !d.hidden; $('dbgbtn').textContent = d.hidden ? 'Show debug log' : 'Hide debug log'; d.textContent = dbgLines.join('\n'); $('menu').hidden = true; };
