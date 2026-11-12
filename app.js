@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver31';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver32';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -658,6 +658,7 @@ function openEdit(i) {
 function closeEdit() {
   selected = -1;
   app.classList.remove('trimtab');
+  updatePair();
   $('edit').hidden = true;
   renderAll();
 }
@@ -671,9 +672,29 @@ function setTab(name) {
   ['trim', 'zoom', 'reframe', 'join'].forEach(n => { $('pane-' + n).hidden = n !== name; });
   $('tinfo').hidden = name !== 'trim';
   renderEdit();
+  updatePair();
 }
 document.querySelectorAll('.tab').forEach(b => { b.onclick = () => setTab(b.dataset.tab); });
 $('edit-done').onclick = closeEdit;
+
+/* Trim: show the neighbour too. Dragging the end shows the next clip beside this one; dragging the start shows the previous clip. */
+let trimSide = 'out';
+const view2 = $('view2'), v2ctx = view2.getContext('2d');
+function updatePair() {
+  const c = clips[selected];
+  const nb = c && tab === 'trim' && selected >= 0 ? clips[selected + (trimSide === 'out' ? 1 : -1)] : null;
+  const on = !!(c && nb && c.thumbs && c.thumbs.length && nb.thumbs && nb.thumbs.length && mode === 'review');
+  app.classList.toggle('pair-out', on && trimSide === 'out');
+  app.classList.toggle('pair-in', on && trimSide === 'in');
+  view2.hidden = !on;
+  if (!on) return;
+  const [W, H] = sizeFor(PREVIEW_SIDE);
+  if (view2.width !== W || view2.height !== H) { view2.width = W; view2.height = H; }
+  const t = trimSide === 'out' ? nb.inT : Math.max(nb.inT, nb.outT - 0.1);
+  v2ctx.filter = (MONO_CTX && app.classList.contains('mono')) ? 'grayscale(1)' : 'none';
+  drawFrame(v2ctx, W, H, thumbAt(nb, t).b, nb);
+  v2ctx.filter = 'none';
+}
 
 function renderEdit() {
   const c = clips[selected];
@@ -747,6 +768,7 @@ tbar.addEventListener('pointerdown', e => {
   const r = tbar.getBoundingClientRect();
   const xin = r.left + c.inT / c.dur * r.width, xout = r.left + c.outT / c.dur * r.width;
   tdrag = Math.abs(e.clientX - xin) <= Math.abs(e.clientX - xout) ? 'in' : 'out';
+  if (trimSide !== tdrag) { trimSide = tdrag; updatePair(); }
   tBefore = snapNow();
   tbar.setPointerCapture(e.pointerId);
   moveTrim(e);

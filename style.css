@@ -167,3 +167,10 @@ button { font:inherit; color:var(--text); }
 #app.editing .th { width:30px; margin-left:-15px; top:-4px; bottom:-4px; }
 #app.editing .th::after { left:13px; top:14px; bottom:14px; }
 #app.editing #timerow { opacity:.6; }
+
+/* trim with the neighbour beside it */
+#view2 { position:absolute; top:0; height:100%; width:calc(50% - 1px); object-fit:contain; background:#000; }
+#view2[hidden] { display:none; }
+#app.pair-out #view, #app.pair-in #view { width:calc(50% - 1px); right:auto; }
+#app.pair-out #view { left:0; } #app.pair-out #view2 { left:calc(50% + 1px); }
+#app.pair-in #view2 { left:0; } #app.pair-in #view { left:calc(50% + 1px); }
