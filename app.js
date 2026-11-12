@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver30';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver31';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -657,12 +657,14 @@ function openEdit(i) {
 
 function closeEdit() {
   selected = -1;
+  app.classList.remove('trimtab');
   $('edit').hidden = true;
   renderAll();
 }
 
 function setTab(name) {
   tab = name;
+  app.classList.toggle('trimtab', name === 'trim');
   ensureEditStill();
   syncStill();
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
@@ -740,6 +742,7 @@ function moveTrim(e) {
   updatePlayhead();
 }
 tbar.addEventListener('pointerdown', e => {
+  e.stopPropagation();                                 // the trim bar sits on the timeline: do not scrub or select from it
   const c = clips[selected]; if (!c) return;
   const r = tbar.getBoundingClientRect();
   const xin = r.left + c.inT / c.dur * r.width, xout = r.left + c.outT / c.dur * r.width;

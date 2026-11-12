@@ -151,7 +151,7 @@ button { font:inherit; color:var(--text); }
 #timerow .grow { flex:1; }
 #undo, #redo { padding:0 12px; }
 
-/* editing: keep the picture clear. Controls turn into light glass over the video and the trim bar gets 5% room each side. */
+/* editing: keep the picture clear. Controls are light glass; on the Trim tab the timeline row itself becomes the trim bar for the selected clip (5% room each side). */
 #app.editing #bottom { background:linear-gradient(rgba(0,0,0,0), rgba(0,0,0,.3) 40%); }
 #app.editing #edit { background:transparent; border:0; border-radius:0; padding:0; margin:0 calc(env(safe-area-inset-right) + 10px) 0 calc(env(safe-area-inset-left) + 10px); }
 #app.editing #edit-title { display:none; }
@@ -159,8 +159,11 @@ button { font:inherit; color:var(--text); }
 #app.editing #tabs .tab.on { border-color:var(--accent); }
 #app.editing #tinfo { text-shadow:0 1px 3px #000; color:#fff; }
 #app.editing .pane { padding:6px 0 2px; }
-#app.editing #tbar { height:52px; margin:0 5%; background:rgba(40,40,48,.5); border:1px solid rgba(255,255,255,.25); }
-#app.editing #tsel { background:rgba(255,176,32,.22); }
-#app.editing .th { width:30px; margin-left:-15px; top:-6px; bottom:-6px; }
+#pane-trim { display:none; }
+#tbar { display:none; }
+#app.editing.trimtab #tbar { display:block; position:absolute; z-index:2; left:5%; right:5%; top:4px; bottom:6px; height:auto; margin:0; background:rgba(40,40,48,.75); border:1px solid rgba(255,255,255,.3); }
+#app.editing.trimtab #tl-clips, #app.editing.trimtab #playhead { visibility:hidden; }
+#app.editing #tsel { background:rgba(255,176,32,.28); }
+#app.editing .th { width:30px; margin-left:-15px; top:-4px; bottom:-4px; }
 #app.editing .th::after { left:13px; top:14px; bottom:14px; }
-#app.editing #timerow, #app.editing #tl { opacity:.6; }
+#app.editing #timerow { opacity:.6; }
