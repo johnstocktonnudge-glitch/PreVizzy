@@ -12,7 +12,7 @@ Copyright (c) 2026 John Stockton (GitHub: johnstocktonnudge-glitch). All rights 
 
 5. Ownership. John Stockton owns PreVizzy, its name, its icons and its design. This licence does not transfer ownership or any other right to you. You may not claim it as your own, remove the notices, or register or claim ownership of it or its name.
 
-6. No warranty. PreVizzy is provided "as is", with no promise that it will work, be error free, or keep your data safe. To the fullest extent the law allows, the owner is not liable for lost footage, lost data, lost time or any other loss or damage from using it. Back up your work with Save project.
+6. No warranty. PreVizzy is provided "as is", with no promise that it will work, be error free, or keep your data safe. You download and use PreVizzy entirely at your own risk. To the fullest extent the law allows, the owner is not liable for any loss or damage of any kind from downloading, installing or using it, including damage to or problems with your phone, tablet, computer, camera, storage card, other equipment or files, and lost footage, data, time or money. Nothing here limits any liability that the law does not allow to be limited. Back up your work with Save project.
 
 7. Privacy. Your clips and projects stay on your own device. The camera picture is never sent anywhere. The app collects nothing. When online it loads its own files and checks for updates.
 
