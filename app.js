@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver37';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver38';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -922,12 +922,11 @@ function splitAtHead() {
   startPrep(b);
   renderTimeline();
   updatePlayhead();
-  if (selected >= 0) { selected = i; renderEdit(); }
   renderAll();
   refreshStill();
   say('Split: now ' + clips.length + ' clips', 1800);
 }
-$('edit-split').onclick = splitAtHead;
+$('center-split').onclick = e => { e.stopPropagation(); splitAtHead(); };
 
 /* ---------- delete the clip being edited (tap twice) ---------- */
 let delTimer = null;
@@ -1315,6 +1314,7 @@ function renderAll() {
   const want = playing ? 'pause' : 'play';
   if (playBtn.dataset.icon !== want) { playBtn.dataset.icon = want; playBtn.innerHTML = playing ? ICON_PAUSE : ICON_PLAY; }
   $('center-play').hidden = !(mode === 'review' && !playing && !recording && !exporting && selected < 0 && clips.length > 0);
+  $('center-split').hidden = $('center-play').hidden;
   saveBtn.disabled = !clips.length || recording || exporting;
   clearBtn.disabled = !clips.length || recording || exporting;
   $('golive').hidden = mode !== 'review' || recording;

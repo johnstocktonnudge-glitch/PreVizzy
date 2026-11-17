@@ -44,6 +44,10 @@ button { font:inherit; color:var(--text); }
 #center-play { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:76px; height:76px; border-radius:50%; padding:0;
   background:rgba(0,0,0,.5); border:2px solid rgba(255,255,255,.7); display:grid; place-items:center; }
 #center-play svg { width:40px; height:40px; }
+/* Split: same glass look as the play triangle, to its right */
+#center-split { position:absolute; left:50%; top:50%; transform:translate(calc(-50% + 96px),-50%); width:76px; height:76px; border-radius:50%; padding:0; font-size:13px; font-weight:700; letter-spacing:.5px;
+  background:rgba(0,0,0,.5); border:2px solid rgba(255,255,255,.7); color:#fff; }
+#app.recording #center-split { visibility:hidden; }
 
 /* Record: a 132px tap zone (easy to hit one-handed, runs out to the screen edge); the ring and red dot are drawn inside it */
 #rec { position:absolute; z-index:3; right:calc(env(safe-area-inset-right) - 8px); top:50%; margin-top:-66px; width:132px; height:132px; border-radius:0; padding:0;
