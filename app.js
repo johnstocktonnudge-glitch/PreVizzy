@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver39';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver40';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -1315,6 +1315,7 @@ function renderAll() {
   if (playBtn.dataset.icon !== want) { playBtn.dataset.icon = want; playBtn.innerHTML = playing ? ICON_PAUSE : ICON_PLAY; }
   $('center-play').hidden = !(mode === 'review' && !playing && !recording && !exporting && selected < 0 && clips.length > 0);
   $('center-split').hidden = $('center-play').hidden;
+  $('rec').classList.toggle('away', playing || exporting);          // clear the picture while watching it back
   saveBtn.disabled = !clips.length || recording || exporting;
   clearBtn.disabled = !clips.length || recording || exporting;
   $('golive').hidden = mode !== 'review' || recording;

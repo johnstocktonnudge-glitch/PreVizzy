@@ -55,6 +55,8 @@ button { font:inherit; color:var(--text); }
 #rec span { width:52px; height:52px; border-radius:50%; background:var(--red); display:block; transition:all .15s; pointer-events:none; }
 #rec.on span { width:28px; height:28px; border-radius:6px; }
 #rec:disabled { opacity:.35; }
+#rec.away { visibility:hidden; }                                  /* playback / export: nothing in the way */
+#app.recording #rec { opacity:0; }                                  /* recording: invisible, but tap the same spot to stop */
 
 /* timeline: full width along the bottom */
 #tl { pointer-events:auto; position:relative; height:56px; margin:0; padding:0 env(safe-area-inset-right) 0 env(safe-area-inset-left); touch-action:none; }
