@@ -44,18 +44,16 @@ button { font:inherit; color:var(--text); }
 #center-play { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:76px; height:76px; border-radius:50%; padding:0;
   background:rgba(0,0,0,.5); border:2px solid rgba(255,255,255,.7); display:grid; place-items:center; }
 #center-play svg { width:40px; height:40px; }
-/* Split: same glass look as the play triangle, to its right */
-#center-split { position:absolute; left:50%; top:50%; transform:translate(calc(-50% + 96px),-50%); width:76px; height:76px; border-radius:50%; padding:0; font-size:13px; font-weight:700; letter-spacing:.5px;
+/* Split: same glass look as the play triangle, to its left */
+#center-split { position:absolute; left:50%; top:50%; transform:translate(calc(-50% - 96px),-50%); width:76px; height:76px; border-radius:50%; padding:0; font-size:13px; font-weight:700; letter-spacing:.5px;
   background:rgba(0,0,0,.5); border:2px solid rgba(255,255,255,.7); color:#fff; }
 #app.recording #center-split { visibility:hidden; }
 
-/* Record: a 132px tap zone (easy to hit one-handed, runs out to the screen edge); the ring and red dot are drawn inside it */
-#rec { position:absolute; z-index:3; right:calc(env(safe-area-inset-right) - 8px); top:50%; margin-top:-66px; width:132px; height:132px; border-radius:0; padding:0;
-  background:none; border:none; display:grid; place-items:center; touch-action:none; }
-#rec span { position:relative; width:104px; height:104px; border-radius:50%; background:rgba(0,0,0,.3); border:5px solid #fff; display:grid; place-items:center; pointer-events:none; box-shadow:0 2px 12px rgba(0,0,0,.5); }
-#rec span::before { content:""; width:72px; height:72px; border-radius:50%; background:var(--red); display:block; transition:all .15s; }
-#rec.on span::before { width:40px; height:40px; border-radius:8px; }
-#rec.dragging span { opacity:.7; transform:scale(1.08); }
+/* Centre controls: SPLIT | PLAY | RECORD/STOP, all the same glass look. Record stays put while recording, so Stop is where Record was. */
+#rec { position:absolute; z-index:3; left:50%; top:50%; transform:translate(calc(-50% + 100px),-50%); width:84px; height:84px; border-radius:50%; padding:0;
+  background:rgba(0,0,0,.5); border:2px solid rgba(255,255,255,.7); display:grid; place-items:center; }
+#rec span { width:52px; height:52px; border-radius:50%; background:var(--red); display:block; transition:all .15s; pointer-events:none; }
+#rec.on span { width:28px; height:28px; border-radius:6px; }
 #rec:disabled { opacity:.35; }
 
 /* timeline: full width along the bottom */

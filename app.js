@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver38';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver39';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -1405,30 +1405,6 @@ stage.addEventListener('click', e => {
   if (playing) { stopPlay(); return; }
   if (!stream && !recording && !exporting && mode === 'live') startCamera();
 });
-
-/* ---------- the Record button floats: drag it to where your thumb lands; it remembers ---------- */
-(() => {
-  const b = $('rec'); let d = null;
-  const apply = p => { if (!p) return; b.style.top = p.y + '%'; b.style.marginTop = '-66px'; if (p.side === 'left') { b.style.right = 'auto'; b.style.left = 'calc(env(safe-area-inset-left) - 8px)'; } else { b.style.left = 'auto'; b.style.right = 'calc(env(safe-area-inset-right) - 8px)'; } };
-  try { apply(JSON.parse(localStorage.getItem('pv_rec_pos'))); } catch (_) {}
-  b.addEventListener('pointerdown', e => { d = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false }; });
-  b.addEventListener('pointermove', e => {
-    if (!d || e.pointerId !== d.id) return;
-    if (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 14) return;
-    if (!d.moved) { d.moved = true; b.classList.add('dragging'); try { b.setPointerCapture(e.pointerId); } catch (_) {} }
-    const r = stage.getBoundingClientRect();
-    const y = Math.max(12, Math.min(88, (e.clientY - r.top) / r.height * 100));
-    const side = (e.clientX - r.left) < r.width / 2 ? 'left' : 'right';
-    d.pos = { y: Math.round(y), side }; apply(d.pos);
-  });
-  const end = e => {
-    if (!d || e.pointerId !== d.id) return;
-    if (d.moved) { b.classList.remove('dragging'); try { localStorage.setItem('pv_rec_pos', JSON.stringify(d.pos)); } catch (_) {} b.dataset.dragged = '1'; setTimeout(() => delete b.dataset.dragged, 300); }
-    d = null;
-  };
-  b.addEventListener('pointerup', end); b.addEventListener('pointercancel', end);
-  b.addEventListener('click', e => { if (b.dataset.dragged) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
-})();
 
 /* ---------- updates ---------- */
 $('ver').textContent = 'PreVizzy ' + APP_VER;
