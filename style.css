@@ -105,6 +105,8 @@ button { font:inherit; color:var(--text); }
 /* playing back: clear everything but the picture and the timeline; it all returns when playback stops (tap the picture to stop) */
 #app.playing #top, #app.playing #timerow, #app.playing #menu, #app.playing #zchip, #app.playing #golive, #app.playing #msg { visibility:hidden; }
 
+#app.playing #bottom { background:none; }                      /* no shadow over the picture while watching it */
+
 /* while recording: clear the screen, leave only what matters */
 #app.recording #bottom, #app.recording #center-play, #app.recording #golive,
 #app.recording #savepj, #app.recording #flip, #app.recording #lens, #app.recording #save, #app.recording #more, #app.recording #count { visibility:hidden; }
