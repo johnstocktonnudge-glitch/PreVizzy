@@ -45,10 +45,13 @@ button { font:inherit; color:var(--text); }
   background:rgba(0,0,0,.5); border:2px solid rgba(255,255,255,.7); display:grid; place-items:center; }
 #center-play svg { width:40px; height:40px; }
 
-#rec { position:absolute; z-index:3; right:calc(env(safe-area-inset-right) + 14px); top:50%; margin-top:-34px; width:68px; height:68px; border-radius:50%; padding:0;
-  background:rgba(0,0,0,.25); border:4px solid #fff; display:grid; place-items:center; }
-#rec span { width:46px; height:46px; border-radius:50%; background:var(--red); display:block; transition:all .15s; }
-#rec.on span { width:26px; height:26px; border-radius:5px; }
+/* Record: a 132px tap zone (easy to hit one-handed, runs out to the screen edge); the ring and red dot are drawn inside it */
+#rec { position:absolute; z-index:3; right:calc(env(safe-area-inset-right) - 8px); top:50%; margin-top:-66px; width:132px; height:132px; border-radius:0; padding:0;
+  background:none; border:none; display:grid; place-items:center; touch-action:none; }
+#rec span { position:relative; width:104px; height:104px; border-radius:50%; background:rgba(0,0,0,.3); border:5px solid #fff; display:grid; place-items:center; pointer-events:none; box-shadow:0 2px 12px rgba(0,0,0,.5); }
+#rec span::before { content:""; width:72px; height:72px; border-radius:50%; background:var(--red); display:block; transition:all .15s; }
+#rec.on span::before { width:40px; height:40px; border-radius:8px; }
+#rec.dragging span { opacity:.7; transform:scale(1.08); }
 #rec:disabled { opacity:.35; }
 
 /* timeline: full width along the bottom */

@@ -3,7 +3,7 @@
    A new version is downloaded in the background as a whole; the saved copy is only
    replaced once the download has fully succeeded. Bump CACHE together with APP_VER
    in app.js every release. */
-const CACHE = 'previzzy-v36';
+const CACHE = 'previzzy-v37';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'engine.js', 'projects.js', 'manifest.webmanifest',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
