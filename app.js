@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver40';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver41';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -622,10 +622,11 @@ tl.addEventListener('pointermove', e => {
     }
     return;
   }
-  if (!tp.moved && Math.abs(e.clientX - tp.x) > 16) { tp.moved = true; clearTimeout(tp.timer); stopPlay(); }
+  if (!tp.moved && Math.abs(e.clientX - tp.x) > 16) { tp.moved = true; clearTimeout(tp.timer); stopPlay(); app.classList.add('scrubbing'); }
   if (tp.moved) goTo(xToT(e.clientX), true);
 });
 const tlEnd = e => {
+  app.classList.remove('scrubbing');
   if (!tp) return;
   clearTimeout(tp.timer); clearTimeout(tp.unlock);
   // a quick touch that wandered a little is still a tap (fingers are not perfectly still)
@@ -1300,6 +1301,7 @@ function renderAll() {
   $('count').textContent = clips.length + '/' + MAX_CLIPS + (typeof pjFlag === 'function' ? pjFlag() : '');
   const full = clips.length >= MAX_CLIPS;
   app.classList.toggle('recording', recording);
+  app.classList.toggle('playing', playing);
   app.classList.toggle('editing', selected >= 0);
   recBtn.classList.toggle('on', recording);
   updateUR();
