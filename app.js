@@ -1,7 +1,7 @@
 'use strict';
 /* PreVizzy - quick and dirty previz. All code is here, visible and editable. */
 
-const APP_VER = 'Ver35';          // bump with CACHE in sw.js every release
+const APP_VER = 'Ver36';          // bump with CACHE in sw.js every release
 const MAX_CLIPS = 10;            // up to 10 clips only
 const VIDEO_BITRATE = 2500000;   // low bit rate (2.5 Mbps) for recording and saving
 const AUDIO_BITRATE = 96000;
@@ -1416,13 +1416,23 @@ $('update').onclick = async () => {
     const found = (await r.text()).match(/APP_VER\s*=\s*'([^']+)'/);
     if (found && found[1] !== APP_VER) {
       if (clips.length && !confirm(found[1] + ' is ready. Updating clears your clips. Update now?')) { m.textContent = found[1] + ' is ready'; return; }
-      m.textContent = 'Updating to ' + found[1] + '...';
-      if (navigator.serviceWorker) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(regs.map(g => g.unregister()));
-      }
-      if (window.caches) { const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); }
-      await Promise.all(FILES.map(f => fetch(f, { cache: 'reload' }).catch(() => {})));
+      m.textContent = 'Downloading ' + found[1] + '...';
+      // Ask the service worker to fetch the new version as a whole. The saved copy stays
+      // in place until the new one has fully arrived, so a lost signal can never leave the app empty.
+      const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
+      if (!reg) { location.replace(location.pathname + '?v=' + encodeURIComponent(found[1]) + '&t=' + Date.now()); return; }
+      const oldActive = reg.active;
+      const done = new Promise((res, rej) => {
+        navigator.serviceWorker.addEventListener('controllerchange', () => res(), { once: true });
+        const poll = setInterval(() => { if (reg.active && reg.active !== oldActive && reg.active.state === 'activated') { clearInterval(poll); res(); } }, 300);
+        reg.addEventListener('updatefound', () => {
+          const w = reg.installing;
+          if (w) w.addEventListener('statechange', () => { if (w.state === 'redundant' && reg.active === oldActive) rej(new Error('install failed')); });
+        });
+        setTimeout(() => rej(new Error('timeout')), 60000);
+      });
+      try { await reg.update(); await done; }
+      catch (e) { m.textContent = 'Download failed - still on ' + APP_VER + '. Try again with a better signal.'; return; }
       location.replace(location.pathname + '?v=' + encodeURIComponent(found[1]) + '&t=' + Date.now());
     } else {
       m.textContent = 'Up to date (' + APP_VER + ')';
