@@ -49,6 +49,7 @@
   </div>
 
   <div id="menu" hidden>
+    <button id="howbtn" class="pill">How to use</button>
     <button id="update" class="pill">Check for updates</button>
     <div id="update-msg"></div>
     <div id="engine-info"></div>
@@ -130,6 +131,44 @@
 <!-- Two hidden players: one plays while the next waits ready -->
 <div id="pj" hidden><div class="card"><div id="pj-body"></div></div></div>
 
+<div id="howto" hidden>
+  <div class="howcard">
+    <button id="how-close" class="pill">Close</button>
+    <h1>PreVizzy: how to use</h1>
+    <p class="how-sub">Quick previz. Shoot it, watch it, cut it, before you move a single light.</p>
+    <h2>Record</h2>
+    <ul>
+      <li>Tap the <b>red button</b> to the right of the PLAY triangle to start recording.</li>
+      <li>Tap <b>anywhere on the right half of the screen</b> to stop. The button is invisible while recording so nothing is in your picture.</li>
+      <li>Each take is added to the end of the timeline automatically. Maximum 10 clips.</li>
+      <li>Top buttons: <b>Camera</b> flips front and back, <b>Lens</b> switches between the phone&rsquo;s rear cameras, <b>B&amp;W</b> shows black and white.</li>
+      <li>Pinch the live picture to zoom before you record.</li>
+    </ul>
+    <h2>Play back and scrub</h2>
+    <ul>
+      <li><b>Play:</b> tap the PLAY triangle in the centre. All buttons and menus clear so you see only the picture. Tap the picture to stop and everything returns.</li>
+      <li><b>Scrub:</b> drag your finger along the timeline at the bottom. The picture follows your finger and the centre buttons step aside until you let go.</li>
+      <li><b>Zoom and reframe:</b> pinch the picture to zoom the clip under the playhead, drag it to reframe. It stays that way. Tap the <b>zoom number</b> at the left to reset.</li>
+    </ul>
+    <h2>Split, trim, move, delete</h2>
+    <ul>
+      <li><b>Split:</b> scrub to the spot, then tap <b>SPLIT</b> to the left of PLAY. The clip becomes two and counts toward the 10-clip limit. Each half keeps all its footage, so you can trim it back out.</li>
+      <li><b>Trim:</b> tap a clip, then drag the yellow handles at either end. The <b>Join</b> tab sets how it meets the next clip: short blend, 2 second fade or 4 second fade. Tap <b>Done</b> when finished.</li>
+      <li><b>Move:</b> press and hold a clip for about a second, then swipe left or right. It swaps places with its neighbour, one place per swipe.</li>
+      <li><b>Delete:</b> press and hold a clip, then swipe up. Or tap the clip and press <b>Delete clip</b> twice.</li>
+      <li><b>Undo and Redo:</b> the last 3 steps, in the time row above the timeline.</li>
+    </ul>
+    <h2>Saving: what is kept and what is not</h2>
+    <ul>
+      <li><b>Clips are not kept by default.</b> They live only inside the app. If you close it without saving, they are discarded. The app asks Save or Discard when it can.</li>
+      <li><b>Save project</b> (orange button) keeps your clips and edits inside the app. Reopen them later from the &#8943; menu under Projects. <b>Save project as...</b> and <b>New project</b> are there too.</li>
+      <li><b>Export</b> turns the timeline into a low-bitrate 1080p MP4. You can save it to the phone, share it, or keep it in the project.</li>
+      <li><b>Clear timeline</b> (&#8943; menu) removes unsaved clips from the timeline to free space. It does not delete saved projects or exported videos. Delete those yourself.</li>
+      <li><b>No signal needed:</b> once installed, PreVizzy works offline, and your footage never leaves the phone.</li>
+    </ul>
+    <button id="how-close2" class="pill">Close</button>
+  </div>
+</div>
 <div id="rep" hidden><button id="rep-close" class="pill">Close</button><pre id="rep-text"></pre></div>
 <pre id="dbg" hidden></pre>
 <div id="pool"><video id="pA" playsinline></video><video id="pB" playsinline></video></div>
